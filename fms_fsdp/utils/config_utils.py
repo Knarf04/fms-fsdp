@@ -308,7 +308,7 @@ def get_model_config(model_variant):
             "tie_embeddings": False,
             "experiments": {
                 "upi": "/gpfs/hshen/UPI_configs/upi_mask_10.pt",
-                "erf": "/gpfs/hshen/UPI_configs/erf_32k.h5"
+                # "erf": "/gpfs/hshen/UPI_configs/erf_32k.h5"
             }
         }
     else:
