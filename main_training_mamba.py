@@ -199,6 +199,8 @@ def main(**kwargs):
         else cfg.ckpt_load_path,
         strict=False,
     )
+    model.enable_experiments(device=torch.cuda.current_device(), dtype=torch.bfloat16)
+
     if not is_resuming:
         start_step = 0
         # Override loaded optim hyperparams with the current values
