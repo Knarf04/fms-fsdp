@@ -199,7 +199,9 @@ def main(**kwargs):
         else cfg.ckpt_load_path,
         strict=False,
     )
-
+    if "experiments" in config_data.keys():
+        model.module.enable_experiments()
+        
     if not is_resuming:
         start_step = 0
         # Override loaded optim hyperparams with the current values
