@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument('--src-dir', type=str, required=True, help="Model source directory, (example: /gpfs/davis/bamba_tune/zloss-500k-step-128k/checkpoints/step_6000_ckp)")
     parser.add_argument('--model-name', type=str, required=True, help="Model name, (example: zloss-500k-step-128k)")
     parser.add_argument('--model-dir', type=str, required=True, help="Saving directory")
-    parser.add_argument('--model-type', type=str, required=True, help="Mamba model type, (example: mamba_9.8b)")
+    parser.add_argument('--model-variant', type=str, required=True, help="Mamba model type, (example: mamba_9.8b)")
 
     args = parser.parse_args()
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     TOKENIZER_DIR = '/datasets/tokenizers/llama3'
 
     # --src-dir=/gpfs/hshen/bamba_upi_tune/bamba_upi_32k_layer/pth/step_6000/consolidated.00.pth
-    fms_to_hf(args.model_type, args.src_dir, DEST_DIR, TOKENIZER_DIR)
+    fms_to_hf(args.model_variant, args.src_dir, DEST_DIR, TOKENIZER_DIR)
 
     convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
         DEST_DIR , 'fp32', DEST_DIR + '/hf', save_model='sharded'
