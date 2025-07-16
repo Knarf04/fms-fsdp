@@ -205,11 +205,11 @@ def main(**kwargs):
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
         config=config_hf
-    ).to(device='cuda:0')
+    )
 
     x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
-    y = model(x)
-    y_hf = model_hf(x)
+    y = model(x).cpu()
+    y_hf = model_hf(x).cpu()
     
     if rank == 0:
         print("Mamba_ssm model: ", y)
