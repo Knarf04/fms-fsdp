@@ -207,14 +207,16 @@ def main(**kwargs):
         config=config_hf
     )
 
-    x = torch.arange(1024)
+    x = torch.randn(2, 1024, 128)
     y = model(x)
     y_hf = model_hf(x)
-    print("Mamba_ssm model: ", y)
-    print("Huggingface model: ", y_hf)
 
-    print(torch.allclose(y, y_hf))
-    
+    if rank == 0:
+        print("Mamba_ssm model: ", y)
+        print("Huggingface model: ", y_hf)
+
+        print(torch.allclose(y, y_hf))
+
     dist.barrier()
     dist.destroy_process_group()
 
