@@ -215,7 +215,8 @@ def main(**kwargs):
         print("Mamba_ssm model: ", y)
         print("Huggingface model: ", y_hf)
 
-        print(torch.allclose(y, y_hf))
+        print("Max error: ", (y.logits - y_hf.logits).abs().max())
+        print(torch.allclose(y.logits, y_hf.logits))
 
     dist.barrier()
     dist.destroy_process_group()
