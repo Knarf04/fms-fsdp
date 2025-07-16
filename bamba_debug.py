@@ -207,10 +207,10 @@ def main(**kwargs):
         config=config_hf
     )
 
-    x = torch.randn(2, 1024, 128)
+    x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
     y = model(x)
     y_hf = model_hf(x)
-
+    
     if rank == 0:
         print("Mamba_ssm model: ", y)
         print("Huggingface model: ", y_hf)
