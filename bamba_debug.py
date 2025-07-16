@@ -208,15 +208,15 @@ def main(**kwargs):
     )
 
     x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
-    y = model(x).cpu()
-    y_hf = model_hf(x).cpu()
+    y = model(x).logits.cpu()
+    y_hf = model_hf(x).logits.cpu()
     
     if rank == 0:
         print("Mamba_ssm model: ", y)
         print("Huggingface model: ", y_hf)
 
-        print("Max error: ", (y.logits - y_hf.logits).abs().max())
-        print(torch.allclose(y.logits, y_hf.logits))
+        print("Max error: ", (y - y_hf).abs().max())
+        print(torch.allclose(y, y_hf))
 
     dist.barrier()
     dist.destroy_process_group()
