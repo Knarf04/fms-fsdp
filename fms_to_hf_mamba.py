@@ -32,7 +32,10 @@ def main(model_variant, load_path, save_path, tokenizer_name_or_path, upi_path=N
         upi_mask_dict = torch.load(upi_path)
         for i in range(32): # Iterate through all layers
             if i not in (9, 18, 27): # Exclude transformer layers
-                state_dict['model_state'][f'backbone.layers.{i}.mixer.upi_mask'] = upi_mask_dict[i].to(torch.bfloat16)
+                if "upi" not in model_variant:
+                    state_dict['model_state'][f'backbone.layers.{i}.mixer.upi_mask'] = upi_mask_dict[i].to(torch.bfloat16)
+                else:
+                    state_dict['model_state'][f'backbone.layers.{i}.mixer.upi_mask'] *= upi_mask_dict[i].to(torch.bfloat16)
 
     print("Loading state dict into the model...")
     model.load_state_dict(state_dict["model_state"])
