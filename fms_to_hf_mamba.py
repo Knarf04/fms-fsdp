@@ -19,8 +19,12 @@ def main(model_variant, load_path, save_path, tokenizer_name_or_path, upi_path=N
     )
 
     # Overwrite UPI mask within the model 
-    if upi_path:
-        config_data = get_model_config(model_variant+"_upi")
+    if upi_path: 
+        if "upi" not in model_variant:
+            model_variant_upi = model_variant+"_upi"
+        else:
+            model_variant_upi = model_variant
+        config_data = get_model_config(model_variant_upi)
         mamba_config = MambaConfig(**config_data)
         model = MambaLMHeadModel(mamba_config)
 
