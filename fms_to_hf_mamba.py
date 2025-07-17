@@ -20,6 +20,7 @@ def main(model_variant, load_path, save_path, tokenizer_name_or_path, upi_path=N
 
     # Overwrite UPI mask within the model 
     if upi_path:
+        print("Overwritting UPI masks...")
         upi_mask_dict = torch.load(upi_path)
         for i in range(32): # Iterate through all layers
             if i not in (9, 18, 27): # Exclude transformer layers
