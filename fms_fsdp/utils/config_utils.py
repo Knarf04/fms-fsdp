@@ -307,8 +307,8 @@ def get_model_config(model_variant):
             "pad_vocab_size_multiple": 16,
             "tie_embeddings": False,
             "experiments": {
-                "upi": "/gpfs/hshen/UPI_configs/upi_mask_10.pt",
-                # "erf": "/gpfs/hshen/UPI_configs/erf_32k.h5"
+                "upi": "",
+                # "erf": ""
             }
         }
     else:
