@@ -30,8 +30,8 @@ def main(model_variant, load_path, save_path, tokenizer_name_or_path, upi_path=N
 
         print("Overwritting UPI masks...")
         upi_mask_dict = torch.load(upi_path)
-        for i in range(32): # Iterate through all layers
-            if i not in (9, 18, 27): # Exclude transformer layers
+        for i in range(config_data['n_layer']): # Iterate through all layers
+            if i not in config_data['attn_layer_idx']: # Exclude transformer layers
                 if "upi" not in model_variant:
                     state_dict['model_state'][f'backbone.layers.{i}.mixer.upi_mask'] = upi_mask_dict[i].to(torch.bfloat16)
                 else:
