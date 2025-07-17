@@ -2,11 +2,11 @@ import fire
 from mamba_ssm.models.config_mamba import MambaConfig
 from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
 from torch.distributed._shard.checkpoint import FileSystemReader, load_state_dict
-
+import torch
 from fms_fsdp.utils.config_utils import get_model_config
 
 
-def main(model_variant, load_path, save_path, tokenizer_name_or_path):
+def main(model_variant, load_path, save_path, tokenizer_name_or_path, upi_path=None):
     print("Initializing model...")
     config_data = get_model_config(model_variant)
     mamba_config = MambaConfig(**config_data)
@@ -17,6 +17,13 @@ def main(model_variant, load_path, save_path, tokenizer_name_or_path):
     load_state_dict(
         state_dict=state_dict, storage_reader=FileSystemReader(load_path), no_dist=True
     )
+
+    # Overwrite UPI mask within the model 
+    if upi_path:
+        upi_mask_dict = torch.load(upi_path)
+        for i in range(32): # Iterate through all layers
+            if i not in (9, 18, 27): # Exclude transformer layers
+                state_dict['model_state'][f'backbone.layers.{i}.mixer.upi_mask'] = upi_mask_dict[i].to(torch.bfloat16)
 
     print("Loading state dict into the model...")
     model.load_state_dict(state_dict["model_state"])
