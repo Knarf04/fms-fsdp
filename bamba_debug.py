@@ -200,6 +200,7 @@ def main(**kwargs):
     config_hf.experiments = {
         "upi": "/gpfs/hshen/UPI_configs/upi_mask_layer.pt",
     }    
+    print(config_hf)
     model_hf = AutoModelForCausalLM.from_pretrained(
         cfg.hf_load_path,
         trust_remote_code=True,
