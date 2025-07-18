@@ -207,11 +207,11 @@ def main(**kwargs):
         config=config_hf
     )
     if rank == 0:
-        print(model_hf.model.rotery_emb.rope_type)
-        print(model_hf.model.rotery_emb.max_seq_len_cached)
-        print(model_hf.model.rotery_emb.original_max_seq_len)
-        print(model_hf.model.rotery_emb.config)
-        print(model_hf.model.rotery_emb.attention_scaling)
+        print(model_hf.model.rotary_emb.rope_type)
+        print(model_hf.model.rotary_emb.max_seq_len_cached)
+        print(model_hf.model.rotary_emb.original_max_seq_len)
+        print(model_hf.model.rotary_emb.config)
+        print(model_hf.model.rotary_emb.attention_scaling)
 
     x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
     y = model(x).logits.cpu()
