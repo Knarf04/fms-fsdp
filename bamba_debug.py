@@ -200,13 +200,18 @@ def main(**kwargs):
     config_hf.experiments = {
         "upi": "/gpfs/hshen/UPI_configs/upi_mask_layer.pt",
     }    
-    print(config_hf)
     model_hf = AutoModelForCausalLM.from_pretrained(
         cfg.hf_load_path,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
         config=config_hf
     )
+    if rank == 0:
+        print(model_hf.model.rotery_emb.rope_type)
+        print(model_hf.model.rotery_emb.max_seq_len_cached)
+        print(model_hf.model.rotery_emb.original_max_seq_len)
+        print(model_hf.model.rotery_emb.config)
+        print(model_hf.model.rotery_emb.attention_scaling)
 
     x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
     y = model(x).logits.cpu()
