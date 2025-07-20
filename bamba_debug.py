@@ -199,6 +199,8 @@ def main(**kwargs):
     config_hf = AutoConfig.from_pretrained(cfg.hf_load_path)
     config_hf.experiments = {
         "upi": "/gpfs/hshen/UPI_configs/upi_mask_layer.pt",
+        "seq_len_trained": 4096,
+        "seq_len_scaled": 32768,
     }    
     model_hf = AutoModelForCausalLM.from_pretrained(
         cfg.hf_load_path,
@@ -206,23 +208,23 @@ def main(**kwargs):
         torch_dtype=torch.bfloat16,
         config=config_hf
     )
-    if rank == 0:
-        print(model_hf.model.rotary_emb.rope_type)
-        print(model_hf.model.rotary_emb.max_seq_len_cached)
-        print(model_hf.model.rotary_emb.original_max_seq_len)
-        print(model_hf.model.rotary_emb.config)
-        print(model_hf.model.rotary_emb.attention_scaling)
+    # if rank == 0:
+    #     print(model_hf.model.rotary_emb.rope_type)
+    #     print(model_hf.model.rotary_emb.max_seq_len_cached)
+    #     print(model_hf.model.rotary_emb.original_max_seq_len)
+    #     print(model_hf.model.rotary_emb.config)
+    #     print(model_hf.model.rotary_emb.attention_scaling)
 
     x = torch.arange(1024)[None, ...].to(torch.int64) # Add batch size
-    y = model(x).logits.cpu()
+    # y = model(x).logits.cpu()
     y_hf = model_hf(x).logits.cpu()
     
-    if rank == 0:
-        print("Mamba_ssm model: ", y)
-        print("Huggingface model: ", y_hf)
+    # if rank == 0:
+    #     print("Mamba_ssm model: ", y)
+    #     print("Huggingface model: ", y_hf)
 
-        print("Max error: ", (y - y_hf).abs().max())
-        print(torch.allclose(y, y_hf))
+    #     print("Max error: ", (y - y_hf).abs().max())
+    #     print(torch.allclose(y, y_hf))
 
     dist.barrier()
     dist.destroy_process_group()

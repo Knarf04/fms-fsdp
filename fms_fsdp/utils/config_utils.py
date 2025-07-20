@@ -308,6 +308,8 @@ def get_model_config(model_variant):
             "tie_embeddings": False,
             "experiments": {
                 "upi": "",
+                "seq_len_trained": 4096,
+                "seq_len_scaled": 32768,
                 # "erf": ""
             }
         }
