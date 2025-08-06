@@ -400,7 +400,10 @@ class ParquetHandler(_ShardFileHandler):
         return pq.read_pandas(path, columns=[match], partitioning=None)[match]
 
     def length(self, path: str):
-        return pq.read_metadata(path).num_rows
+        try:
+            return pq.read_metadata(path).num_rows
+        except:
+            print("Offending path:", path)
 
     def get(self, reader, index: int, drop_tokens: Set):
         doc = self.tokenizer(str(reader[index]))["input_ids"]
