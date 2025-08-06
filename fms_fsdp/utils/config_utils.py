@@ -338,7 +338,7 @@ def get_model_config(model_variant):
             "pad_vocab_size_multiple": 16,
             "tie_embeddings": False,
             "experiments": {
-                "sp": "",
+                "sp": 4,
             }
         }
     else:
