@@ -72,6 +72,7 @@ def train(
                 )
                 run["hparams"] = asdict(cfg)
 
+    is_exp_out = (len(model.backbone.experiments) != 0)
     model.train()
     ddp_stats = torch.zeros(3).to(local_rank)
 
@@ -85,7 +86,11 @@ def train(
         label = label.to(local_rank)
 
         optimizer.zero_grad()
-        output = model(input)
+        if not is_exp_out:
+            output = model(input)
+        else:
+            output, exp_out_collect = model(input)
+
         output = output.logits if hasattr(output, "logits") else output
         ce_loss = torch.nn.CrossEntropyLoss()
         loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
@@ -180,6 +185,10 @@ def train(
                 None,
                 tokens_seen=tokens_seen + new_tokens_seen,
             )
+
+        # Figure out the current rank, make sure the experiment_out does not overwrite each other
+        if is_exp_out:
+            print(exp_out_collect)
 
     return train_loss
 
