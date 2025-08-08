@@ -189,12 +189,13 @@ def train(
         # Figure out the current rank, make sure the experiment_out does not overwrite each other
         if is_exp_out and batch_idx % cfg.report_interval == 0:
             for layer_idx in exp_out_collect:
-                for key in exp_out_collect[layer_idx]:
-                    experiment_out = exp_out_collect[layer_idx][key]
+                # for key in exp_out_collect[layer_idx]:
+                if "final_states" in exp_out_collect[layer_idx]:
+                    experiment_out = exp_out_collect[layer_idx]["final_states"]
                     dist.reduce(experiment_out, dst=0, op=dist.ReduceOp.SUM, async_op=False)
                     if rank == 0:
                         num_nodes = int(os.environ["WORLD_SIZE"]) / torch.cuda.device_count()
-                        exp_out_collect[layer_idx][key] = experiment_out // num_nodes
+                        exp_out_collect[layer_idx]["final_states"] = experiment_out // num_nodes
             if rank == 0:
                 torch.save(exp_out_collect, f"experiment_out_step={batch_idx}.pt")
 
