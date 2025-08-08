@@ -194,8 +194,8 @@ def train(
                     experiment_out = exp_out_collect[layer_idx]["final_states"]
                     dist.reduce(experiment_out, dst=0, op=dist.ReduceOp.SUM, async_op=False)
                     if rank == 0:
-                        num_nodes = int(os.environ["WORLD_SIZE"]) / torch.cuda.device_count()
-                        exp_out_collect[layer_idx]["final_states"] = experiment_out // num_nodes
+                        num_nodes = int(os.environ["WORLD_SIZE"]) // torch.cuda.device_count()
+                        exp_out_collect[layer_idx]["final_states"] = experiment_out / num_nodes
             if rank == 0:
                 torch.save(exp_out_collect, f"experiment_out_step={batch_idx}.pt")
 
