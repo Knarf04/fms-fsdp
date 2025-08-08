@@ -83,3 +83,6 @@ class train_config:
 
     # huggingface
     hf_load_path: str = ""
+
+    # experiment output directory
+    exp_out_path: str = ""
