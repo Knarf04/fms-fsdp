@@ -197,6 +197,7 @@ def train(
                         num_nodes = int(os.environ["WORLD_SIZE"]) // torch.cuda.device_count()
                         exp_out_collect[layer_idx]["final_states"] = experiment_out / num_nodes
             if rank == 0:
+                os.makedirs(cfg.exp_out_path, exist_ok=True)
                 torch.save(exp_out_collect, os.path.join(cfg.exp_out_path, f"experiment_out_step={batch_idx}.pt"))
 
     return train_loss
