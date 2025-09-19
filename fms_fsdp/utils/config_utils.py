@@ -344,6 +344,34 @@ def get_model_config(model_variant):
                 }
             }
         }
+    elif model_variant == "mamba_9.8b_exact":
+        model_config = {
+            "d_model": 4096,
+            "d_intermediate": 14336,
+            "n_layer": 32,
+            "vocab_size": 128256,
+            "ssm_cfg": {"layer": "Mamba2"},
+            "attn_layer_idx": [9, 18, 27],
+            "attn_cfg": {
+                "causal": True,
+                "d_conv": 0,
+                "head_dim": 128,
+                "num_heads": 32,
+                "num_heads_kv": 8,
+                "out_proj_bias": False,
+                "qkv_proj_bias": False,
+                "rotary_emb_dim": 64,
+            },
+            "rms_norm": True,
+            "residual_in_fp32": True,
+            "fused_add_norm": True,
+            "pad_vocab_size_multiple": 16,
+            "tie_embeddings": False,
+            "experiments": {
+                "exact": True,
+                "scale": 1
+            }
+        }
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
