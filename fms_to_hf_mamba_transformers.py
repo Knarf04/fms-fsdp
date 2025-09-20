@@ -118,7 +118,7 @@ def convert_ssm_config_to_hf_config(
         hf_config.attn_rotary_emb = attn_cfg["rotary_emb_dim"]
         hf_config.num_attention_heads = attn_cfg["num_heads"]
         hf_config.num_key_value_heads = attn_cfg["num_heads_kv"]
-        hf_config.rope_theta = attn_cfg["rotary_emb_base"]
+        hf_config.rope_theta = attn_cfg.get("rotary_emb_base", 10000)
 
     attention_layer_indices = config_ssm.get("attn_layer_idx")
     if attention_layer_indices:
