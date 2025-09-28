@@ -226,7 +226,6 @@ def convert_mamba_ssm_checkpoint_file_to_huggingface_model_file(
     )
     # FIXME: allow other parameters to pass in
     state_dict = convert_state_dict_from_mamba_ssm(state_dict)
-    print(state_dict)
 
     # Save new model to pytorch_dump_path
     dtype = torch.float32 if precision == "fp32" else (torch.bfloat16 if precision == "bf16" else torch.float16)
@@ -278,4 +277,3 @@ if __name__ == "__main__":
         args.output_dir,
         args.tokenizer_model_path,
     )
-

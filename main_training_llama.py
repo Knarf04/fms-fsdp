@@ -2,6 +2,7 @@ import math
 import os
 
 import fire
+import logging
 import torch
 import torch.optim as optim
 from fms.models.llama import LLaMA, LLaMABlock
@@ -21,6 +22,8 @@ from fms_fsdp.utils.train_utils import (
     train,
 )
 
+logging.basicConfig()
+logging.getLogger().setLevel(logging.INFO)
 
 def main(**kwargs):
     # get configs
@@ -72,7 +75,7 @@ def main(**kwargs):
     if rank == 0:
         print("Constructing datasets...")
     if not cfg.use_dummy_dataset:
-        train_loader = get_data_loader(cfg, rank, world_size)
+        train_loader = get_data_loader(cfg, rank, world_size, world_size)
     else:
         train_loader = get_dummy_loader(cfg, rank, world_size)
     if rank == 0:
