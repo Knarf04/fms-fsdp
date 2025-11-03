@@ -100,3 +100,6 @@ class train_config:
 
     # experiment output directory
     exp_out_path: str = ""
+
+    # freeze some of the layers
+    freeze_layer: str = "" 
