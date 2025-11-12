@@ -371,6 +371,124 @@ def get_model_config(model_variant):
             rope_scaling={"rope_type":"unrope"},
             rope_partial=.5,
         )
+    elif model_variant == "llama_1b_unrope64":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=64,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+        )
+    elif model_variant == "llama_1b_unrope_onecycle":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=8192,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+        )
+    elif model_variant == "llama_1b_unrope32_1/8":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.125,
+        )
+    elif model_variant == "llama_1b_unrope32_1/4":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.25,
+        )
+    elif model_variant == "llama_1b_unrope32_3/8":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.375,
+        )
+    elif model_variant == "llama_1b_unrope32_5/8":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.625,
+        )
+    elif model_variant == "llama_1b_unrope32_3/4":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.75,
+        )
+    elif model_variant == "llama_1b_unrope32_7/8":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.875,
+        )
+    elif model_variant == "llama_1b_unrope32_triton":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=20,
+            kvheads=5,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+        )
+>>>>>>> 8a27b13 (Add channel ablations)
     elif model_variant == "llama_3b":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
