@@ -488,6 +488,32 @@ def get_model_config(model_variant):
             rope_scaling={"rope_type":"unrope"},
             rope_partial=.875,
         )
+    elif model_variant == "llama_1b_unrope32_7-16":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.45,
+        )
+    elif model_variant == "llama_1b_unrope32_9-16":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.55,
+        )
     elif model_variant == "llama_1b_unrope32_triton":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
