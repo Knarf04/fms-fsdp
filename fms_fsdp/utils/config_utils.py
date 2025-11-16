@@ -354,9 +354,9 @@ def get_model_config(model_variant):
             nlayers=32,
             hidden_grow_factor=3.2,
             max_expected_seq_len=4096,
-            rope_theta=6,
+            rope_theta=6.283,
             rope_scaling={"rope_type":"unrope"},
-            rope_partial=.25,
+            rope_partial=.5,
         )
     elif model_variant == "llama_1b_unrope16":
         model_config = LLaMAConfig(
