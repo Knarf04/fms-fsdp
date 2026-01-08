@@ -20,19 +20,13 @@ def convert_to_hf(model: LLaMA, model_variant, is_old_fms) -> LlamaForCausalLM:
             hidden_size=hf_config.hidden_size,
             rms_norm_eps=hf_config.norm_eps,
             num_attention_heads=hf_config.nheads,
-            num_key_value_heads=None if hf_config.kvheads == 0 else hf_config.kvheads,
-            num_hidden_layers=hf_config.nlayers,
-            intermediate_size=hf_config.multiple_of
-            * (
-                (
-                    int(hf_config.hidden_grow_factor * hf_config.hidden_size)
-                    + hf_config.multiple_of
-                    - 1
-                )
-                // hf_config.multiple_of
+            num_key_value_heads=(
+                None if hf_config.kvheads == 0 else hf_config.kvheads
             ),
-            pad_token_id=(
-                None if hf_config.pad_token_id == -1 else hf_config.pad_token_id
+            num_hidden_layers=hf_config.nlayers,
+            pad_token_id=hf_config.pad_token_id,
+            intermediate_size=int(
+                hf_config.hidden_size * hf_config.hidden_grow_factor
             ),
             bos_token_id=hf_config.bos_token_id,
             eos_token_id=hf_config.eos_token_id,
@@ -75,7 +69,7 @@ def convert_to_hf(model: LLaMA, model_variant, is_old_fms) -> LlamaForCausalLM:
                 oss_hf_layer.self_attn.k_proj.weight.copy_(k)
                 oss_hf_layer.self_attn.v_proj.weight.copy_(v)
             oss_hf_layer.self_attn.o_proj.weight.copy_(fms_hf_layer.attn.dense.weight)
-            oss_hf_layer.self_attn.rotary_emb.inv_freqs = freqs
+            #oss_hf_layer.self_attn.rotary_emb.inv_freqs = freqs
 
             # mlp
             if is_old_fms:
