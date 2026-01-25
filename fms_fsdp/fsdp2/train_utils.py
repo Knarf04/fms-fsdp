@@ -8,16 +8,17 @@ except ImportError:
     from pkg_resources import packaging  # type: ignore
 
 import time
-from datetime import timedelta
 
 import torch
 import torch.cuda.nccl as nccl
 import torch.distributed as dist
-from torch.distributed.fsdp import ShardingStrategy
 
-from fms_fsdp.policies import *
+from fms_fsdp.policies.ac_handler import apply_fsdp_checkpointing
 from fms_fsdp.experiments.param_freeze_utils import *
-
+from fms_fsdp.fsdp2.mixed_precision import (
+    fpSixteen, 
+    bfSixteen,
+)
 
 def train(
     cfg,
@@ -87,10 +88,19 @@ def train(
             freeze_norm_f=True,
             freeze_lm_head=True,
         )
+    else:
+        frozen_param_names = build_gradient_mask(
+            model,
+            "",
+            freeze_embedding=False,
+            freeze_norm_f=False,
+            freeze_lm_head=False,
+        )
+
     if rank == 0:
         print(f"--> Using gradient masking for {len(frozen_param_names)} parameters")
-        # for name in frozen_param_names:
-        #     print(name)
+    #     for name in frozen_param_names:
+    #         print(name)
 
     start = time.time()
     loop_start = time.time()
@@ -141,8 +151,8 @@ def train(
         #     print(f"Total params with gradients: {total_active_params}")
         #     print(f"{'='*65}\n")
         # =====================================================================
-
-        ddp_stats[1] += model.clip_grad_norm_(cfg.grad_clip_thresh).item()
+        
+        ddp_stats[1] += torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_thresh).full_tensor().item()
         optimizer.step()
         scheduler.step()
 
@@ -248,15 +258,6 @@ def train(
     return train_loss
 
 
-def setup():
-    dist.init_process_group("nccl", timeout=timedelta(seconds=60 * 60))
-
-
-def setup_environ_flags():
-    os.environ["TORCH_SHOW_CPP_STACKTRACES"] = str(1)
-    os.environ["NCCL_ASYNC_ERROR_HANDLING"] = str(1)
-
-
 def get_mixed_precision_policy(cfg, rank):
     verify_bfloat_support = (
         torch.version.cuda
@@ -269,71 +270,41 @@ def get_mixed_precision_policy(cfg, rank):
     if cfg.mixed_precision:
         bf16_ready = verify_bfloat_support
         if bf16_ready:
+            buffer_dtype = torch.bfloat16
             mixed_precision_policy = bfSixteen
             if rank == 0:
                 print("bFloat16 enabled for mixed precision - using bfSixteen policy")
         else:
+            buffer_dtype = torch.float16
             mixed_precision_policy = fpSixteen
             if rank == 0:
                 print("FP16 enabled")
+        def cast_buffers(model):
+            if rank == 0:
+                print(f"--> casting buffers to {buffer_dtype} for mixed precision parity with FSDP1")
+            for module in model.modules():
+                for buffer_name, buffer in module.named_buffers(recurse=False):
+                    setattr(module, buffer_name, buffer.to(buffer_dtype))
+            return model
+        mixed_precision_buffer = cast_buffers
     else:
         mixed_precision_policy = None
+        mixed_precision_buffer = lambda model: model
 
-    return mixed_precision_policy
+    return mixed_precision_policy, mixed_precision_buffer
 
 
 def get_policies(cfg, rank, block):
     """Get policies for mixed precision, wrapping, sharding, ac and param init function."""
 
     # mixed precision
-    mixed_precision_policy = get_mixed_precision_policy(cfg, rank)
-
-    # wrapping policy
-    wrapping_policy = get_wrapper(block)
-
-    # sharding strategy
-    if cfg.sharding_strategy == "fsdp":
-        sharding_strategy = ShardingStrategy.FULL_SHARD
-    elif cfg.sharding_strategy == "hsdp":
-        sharding_strategy = ShardingStrategy.HYBRID_SHARD
-    elif cfg.sharding_strategy == "ddp":
-        sharding_strategy = ShardingStrategy.NO_SHARD
-    else:
-        sharding_strategy = ShardingStrategy.FULL_SHARD
-    if rank == 0:
-        print(f"Sharding strategy = {cfg.sharding_strategy}")
+    mixed_precision_policy, mixed_precision_buffer = get_mixed_precision_policy(cfg, rank)
 
     # ac handler
     apply_selective_ac = partial(apply_fsdp_checkpointing, block=block)
 
-    # param init function
-    if cfg.low_cpu_fsdp:
-        param_init_fn = param_init_function
-    else:
-        param_init_fn = None
-
     return (
         mixed_precision_policy,
-        wrapping_policy,
-        sharding_strategy,
+        mixed_precision_buffer,
         apply_selective_ac,
-        param_init_fn,
-    )
-
-
-def get_profiler(cfg, rank):
-    if not cfg.use_profiler:
-        return
-    if cfg.profiler_rank0_only and rank != 0:
-        return
-    return torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        schedule=torch.profiler.schedule(wait=1, warmup=2, active=3, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler("/gpfs/hshen/profile_traces"),
-        profile_memory=True,
-        with_stack=False,
-        record_shapes=True,
     )

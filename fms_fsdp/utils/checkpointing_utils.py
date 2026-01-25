@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 import torch
-from torch.distributed._shard.checkpoint import (
+from torch.distributed.checkpoint import (
     FileSystemReader,
     FileSystemWriter,
     load_state_dict,
@@ -18,6 +18,7 @@ from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_
 from torch.distributed.fsdp import FullStateDictConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import StateDictType
+
 
 
 def get_latest(targdir, qualifier=lambda x: True, key=os.path.getctime):
