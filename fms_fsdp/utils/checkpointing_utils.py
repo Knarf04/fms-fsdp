@@ -63,6 +63,23 @@ def get_oldest(targdir, qualifier=lambda x: True, key=os.path.getctime):
     return None
 
 
+def _fix_tensor_contiguity(model):
+    """
+    Ensure all model parameters and buffers are contiguous.
+    This is CRITICAL for custom CUDA kernels like causal_conv1d that
+    require contiguous memory layout.
+
+    After DCP loading, tensors may have non-contiguous strides which
+    causes 'CUDA error: invalid configuration argument' in conv1d kernels.
+    """
+    for name, param in model.named_parameters():
+        if not param.is_contiguous():
+            param.data = param.data.contiguous()
+    for name, buf in model.named_buffers():
+        if buf is not None and not buf.is_contiguous():
+            buf.data = buf.data.contiguous()
+            
+
 class Checkpointer:
     """
     Manages the checkpoint directory. Saves new checkpoints and deletes old ones after the specified number are written.
@@ -227,6 +244,8 @@ class Checkpointer:
                     model.to("cuda")
                 else:
                     model.to(self.local_rank)
+                # Fix non-contiguous tensors after loading (required for custom CUDA kernels like causal_conv1d)
+                _fix_tensor_contiguity(model)
                 self.report(
                     f"Checkpoint {load_path} is a single-file checkpoint containing only a model. Optimizer and dataloader are from scratch.",
                     model_load_time=time.time() - model_load_time,
@@ -247,6 +266,8 @@ class Checkpointer:
                     model.to("cuda")
                 else:
                     model.to(self.local_rank)
+                # Fix non-contiguous tensors after DCP loading (required for custom CUDA kernels like causal_conv1d)
+                _fix_tensor_contiguity(model)
                 self.report(model_load_time=time.time() - model_load_time)
                 step = 0
                 ntok = 0

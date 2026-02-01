@@ -22,7 +22,8 @@ from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
 )
 
-from fms_fsdp.utils.checkpointing_utils import Checkpointer
+from fms_fsdp.utils.checkpointing_utils import Checkpointer, _fix_tensor_contiguity
+
 
 
 class Checkpointer_FSDP2(Checkpointer):
@@ -41,27 +42,38 @@ class Checkpointer_FSDP2(Checkpointer):
         local_rank,
         report_fn=None,
         model_auto_placement=False, # Unused in FSDP2, kept for signature compatibility
+        mesh=None,  # DeviceMesh for HSDP - needed to get shard process group
     ):
         super().__init__(
-            ckpdir, 
-            n_to_save, 
-            parallel_mode, 
-            rank, 
-            local_rank, 
-            report_fn, 
+            ckpdir,
+            n_to_save,
+            parallel_mode,
+            rank,
+            local_rank,
+            report_fn,
             model_auto_placement
         )
+        # For HSDP, we need the intra-node (shard) process group so that
+        # only node 0 ranks participate in the collective save_state_dict().
+        # Without this, HSDP would deadlock because _do_save() filters out
+        # non-node-0 ranks, but DCP expects all ranks in the default world group.
+        self.shard_pg = None
+        if parallel_mode == "hsdp" and mesh is not None:
+            # 2D mesh: ("inter_node", "intra_node") - get the shard dimension group
+            self.shard_pg = mesh["intra_node"].get_group()
 
     def _write(self, state_dict, loader_state, process_group, save_name, rank):
         os.makedirs(save_name, exist_ok=True)
-        # dist.barrier()
         writer = FileSystemWriter(save_name, single_file_per_rank=True)
         if state_dict is not None:
-            # FSDP2/DCP save is collective. We ignore 'process_group' arg here 
-            # and let DCP use the default group unless you specifically need to restrict it.
+            # For HSDP, use the shard (intra-node) process group so only node 0
+            # ranks participate in the collective. This prevents deadlock since
+            # _do_save() filters out non-node-0 ranks.
+            pg = self.shard_pg if self.shard_pg is not None else process_group
             save_state_dict(
                 state_dict=state_dict,
                 storage_writer=writer,
+                process_group=pg,
                 planner=DefaultSavePlanner(),
             )
         if loader_state is not None:
@@ -109,6 +121,8 @@ class Checkpointer_FSDP2(Checkpointer):
                     model_state,
                     options=options,
                 )
+                # Fix non-contiguous tensors after DCP loading (required for custom CUDA kernels like causal_conv1d)
+                _fix_tensor_contiguity(target_model)
                 self.report(
                     f"Checkpoint {load_path} is a single-file checkpoint containing only a model. Optimizer and dataloader are from scratch.",
                     model_load_time=time.time() - model_load_time,
@@ -128,6 +142,8 @@ class Checkpointer_FSDP2(Checkpointer):
                     model_ckp["model_state"],
                     options=StateDictOptions(strict=strict),
                 )
+                # Fix non-contiguous tensors after DCP loading (required for custom CUDA kernels like causal_conv1d)
+                _fix_tensor_contiguity(model)
 
                 self.report(model_load_time=time.time() - model_load_time)
                 step = 0

@@ -233,7 +233,8 @@ def main(**kwargs):
 
     # optionally load from checkpoint (when continue pretraining)
     checkpointer = Checkpointer_FSDP2(
-        cfg.ckpt_save_path, 1000, cfg.sharding_strategy, rank, local_rank
+        cfg.ckpt_save_path, 1000, cfg.sharding_strategy, rank, local_rank,
+        mesh=fsdp_mesh if cfg.sharding_strategy == "hsdp" else None,
     )
     model, optimizer, _, start_step, tokens_seen, is_resuming = checkpointer.load(
         model,
@@ -296,9 +297,10 @@ def main(**kwargs):
         start_step,
         tokens_seen,
         cp_degree,
+        is_compiled=cfg.use_torch_compile,
     )
 
-    checkpointer.save_single_file(cfg.num_steps, model)
+    checkpointer.save_single_file(cfg.num_steps, model, is_compiled=cfg.use_torch_compile)
 
     dist.barrier()
     dist.destroy_process_group()

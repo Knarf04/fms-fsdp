@@ -152,19 +152,21 @@ def train(
         if profiler:
             profiler.step()
 
+        world_size = int(os.environ["WORLD_SIZE"])
+        new_tokens_seen = (
+            (batch_idx - start_step)
+            * world_size
+            * cfg.batch_size
+            * cfg.seq_length
+            // cp_degree
+        )
+
         if batch_idx % cfg.report_interval == 0:
             dist.all_reduce(ddp_stats, op=dist.ReduceOp.SUM)
             train_loss = ddp_stats[0] / ddp_stats[2]
             g_norm = ddp_stats[1] / ddp_stats[2]
             elapsed_time = time.time() - loop_start
-            world_size = int(os.environ["WORLD_SIZE"])
-            new_tokens_seen = (
-                (batch_idx - start_step)
-                * world_size
-                * cfg.batch_size
-                * cfg.seq_length
-                // cp_degree
-            )
+
             if rank == 0:
                 total_tokens_seen = tokens_seen + new_tokens_seen
                 current_loss = train_loss.item()
@@ -223,11 +225,17 @@ def train(
         torch.cuda.reset_peak_memory_stats(device=torch.cuda.current_device())
 
         if batch_idx % cfg.checkpoint_interval == 0:
-            checkpointer.save(
+            # checkpointer.save(
+            #     batch_idx,
+            #     model,
+            #     optimizer,
+            #     None,
+            #     tokens_seen=tokens_seen + new_tokens_seen,
+            # )
+            checkpointer.save_single_file(
                 batch_idx,
                 model,
-                optimizer,
-                None,
+                is_compiled=False, #is_compiled,
                 tokens_seen=tokens_seen + new_tokens_seen,
             )
 
