@@ -556,6 +556,132 @@ def get_model_config(model_variant):
             "pad_vocab_size_multiple": 16,
             "tie_embeddings": False,
         }
+    elif model_variant == "llama_1b_p=0":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=False,
+            prune_thresh=0,
+        )
+    elif model_variant == "llama_1b_unrope32_p=0":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+            prune=False,
+            prune_thresh=0,
+        )
+    elif model_variant == "llama_1b_nope_p=0":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_partial=0,
+            prune=False,
+            prune_thresh=0,
+        )
+    elif model_variant == "llama_1b_p=0.01":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=0.01,
+        )
+    elif model_variant == "llama_1b_unrope32_p=0.01":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+            prune=True,
+            prune_thresh=0.01,
+        )
+    elif model_variant == "llama_1b_nope_p=0.01":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_partial=0,
+            prune=True,
+            prune_thresh=0.01,
+        )
+    elif model_variant == "llama_1b_p=0.05":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=0.05,
+        )
+    elif model_variant == "llama_1b_unrope32_p=0.05":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=32,
+            rope_scaling={"rope_type":"unrope"},
+            rope_partial=.5,
+            prune=True,
+            prune_thresh=0.05,
+        )
+    elif model_variant == "llama_1b_nope_p=0.05":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_partial=0,
+            prune=True,
+            prune_thresh=0.05,
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
