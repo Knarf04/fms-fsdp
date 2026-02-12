@@ -27,6 +27,8 @@ from fms_fsdp.utils.train_utils import (
     setup_environ_flags,
 )
 
+from fms_fsdp.experiments.param_freeze_utils import *
+
 # FSDP2
 from fms_fsdp.fsdp2.train_utils import (
     get_policies,
@@ -198,37 +200,51 @@ def main(**kwargs):
         torch._dynamo.config.accumulated_cache_size_limit = 128
         model = torch.compile(model)
 
-    # Optimizer
-    # optimizer = optim.AdamW(
-    #     model.parameters(), lr=cfg.learning_rate, betas=(0.9, 0.95), weight_decay=0.1
-    # )
-    params_with_decay = []
-    params_without_decay = []
+    # Optimizer: split params by frozen/trainable and weight decay
+    frozen_param_names = build_gradient_mask(model, cfg.freeze_layer) if cfg.freeze_layer else set()
+
+    trainable_with_decay = []
+    trainable_without_decay = []
+    frozen_with_decay = []
+    frozen_without_decay = []
+
     for name, param in model.named_parameters():
-        # print(f'{name=}')
-        if 'A_log' in name or 'D' in name or 'dt_bias' in name:
-            params_without_decay.append(param)
+        is_frozen = name in frozen_param_names
+        is_no_decay = 'A_log' in name or 'D' in name or 'dt_bias' in name
+
+        if is_frozen:
+            if is_no_decay:
+                frozen_without_decay.append(param)
+            else:
+                frozen_with_decay.append(param)
         else:
-            params_with_decay.append(param)
+            if is_no_decay:
+                trainable_without_decay.append(param)
+            else:
+                trainable_with_decay.append(param)
 
-    assert len(params_with_decay) + len(params_without_decay) == len(list(model.named_parameters()))
+    total_params = len(list(model.named_parameters()))
+    assert (len(trainable_with_decay) + len(trainable_without_decay) +
+            len(frozen_with_decay) + len(frozen_without_decay)) == total_params
 
-    # print(f'{params_with_decay=}')
-    # print(f'{params_without_decay=}')
+    if rank == 0 and frozen_param_names:
+        n_frozen = len(frozen_with_decay) + len(frozen_without_decay)
+        print(f"--> freeze_layer: {cfg.freeze_layer}")
+        print(f"--> frozen params: {n_frozen}, trainable params: {total_params - n_frozen}")
+
+    param_groups = [
+        {"params": trainable_with_decay, "weight_decay": 0.1, "lr": cfg.learning_rate},
+        {"params": trainable_without_decay, "weight_decay": 0., "lr": cfg.learning_rate},
+    ]
+    if frozen_with_decay:
+        param_groups.append({"params": frozen_with_decay, "weight_decay": 0.1, "lr": 0.0, "frozen": True})
+    if frozen_without_decay:
+        param_groups.append({"params": frozen_without_decay, "weight_decay": 0., "lr": 0.0, "frozen": True})
 
     optimizer = optim.AdamW(
-        [
-            {
-                "params": params_with_decay,
-                "weight_decay": 0.1,
-            },
-            {
-                "params": params_without_decay,
-                "weight_decay": 0.,
-            },
-        ],
-        betas = (0.9, 0.95),
-        lr = cfg.learning_rate, # cfg.learning_rate,
+        param_groups,
+        betas=(0.9, 0.95),
+        lr=cfg.learning_rate,
     )
 
     # optionally load from checkpoint (when continue pretraining)
@@ -252,7 +268,13 @@ def main(**kwargs):
         start_step = 0
         # Override loaded optim hyperparams with the current values
         for g in optimizer.param_groups:
-            g["initial_lr"] = cfg.learning_rate
+            g["initial_lr"] = 0.0 if g.get("frozen", False) else cfg.learning_rate
+    else:
+        # Ensure frozen groups stay frozen even when resuming from a checkpoint
+        for g in optimizer.param_groups:
+            if g.get("frozen", False):
+                g["initial_lr"] = 0.0
+                g["lr"] = 0.0
 
     # LR schedule
     warmup_interval = min(2000, cfg.num_steps // 20)

@@ -14,7 +14,6 @@ import torch.cuda.nccl as nccl
 import torch.distributed as dist
 
 from fms_fsdp.policies.ac_handler import apply_fsdp_checkpointing
-from fms_fsdp.experiments.param_freeze_utils import *
 from fms_fsdp.fsdp2.mixed_precision import (
     fpSixteen, 
     bfSixteen,
@@ -80,29 +79,6 @@ def train(
     model.train()
     ddp_stats = torch.zeros(3).to(local_rank)
 
-    frozen_param_names = set()
-    if cfg.freeze_layer:
-        frozen_param_names = build_gradient_mask(
-            model,
-            cfg.freeze_layer,
-            freeze_embedding=True,
-            freeze_norm_f=True,
-            freeze_lm_head=True,
-        )
-    else:
-        frozen_param_names = build_gradient_mask(
-            model,
-            "",
-            freeze_embedding=False,
-            freeze_norm_f=False,
-            freeze_lm_head=False,
-        )
-
-    if rank == 0:
-        print(f"--> Using gradient masking for {len(frozen_param_names)} parameters")
-    #     for name in frozen_param_names:
-    #         print(name)
-
     start = time.time()
     loop_start = time.time()
     train_loss = -1
@@ -124,35 +100,6 @@ def train(
         loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
         loss.backward()
 
-        # Apply gradient mask to zero out gradients for "frozen" params
-        if frozen_param_names:
-            apply_gradient_mask(model, frozen_param_names)
-
-        # =====================================================================
-        # DEBUG GRADIENT NORMS
-        # =====================================================================
-        # if batch_idx == start_step + 1:
-        #     print(f"\n{'='*20} DEBUG: GRADIENT CHECK (Step {batch_idx}) {'='*20}")
-        #     print(f"{'Param Name':<60} | {'Grad Norm (Local Shard)'}")
-        #     print("-" * 85)
-            
-        #     total_active_params = 0
-        #     for name, param in model.named_parameters():
-        #         if param.grad is not None:
-        #             # NOTE: In FSDP, this is the norm of the LOCAL shard, not global.
-        #             # But it is sufficient to prove the gradient is non-zero.
-        #             g_norm = param.grad.norm().item()
-        #             print(f"[Rank {rank}] {name:<60} | {g_norm:.6f}")
-        #             total_active_params += 1
-        #         elif param.requires_grad:
-        #             # Warn if a trainable param has no gradient (Broken Chain)
-        #             print(f"[Rank {rank}] {name:<60} | {'[WARNING: None] (Broken Chain?)'}")
-            
-        #     print("-" * 85)
-        #     print(f"Total params with gradients: {total_active_params}")
-        #     print(f"{'='*65}\n")
-        # =====================================================================
-        
         ddp_stats[1] += torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_thresh).full_tensor().item()
         optimizer.step()
         scheduler.step()
