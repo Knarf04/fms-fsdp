@@ -682,6 +682,58 @@ def get_model_config(model_variant):
             prune=True,
             prune_thresh=0.05,
         )
+    elif model_variant == "llama_1b_p=1/15":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/15),
+        )
+    elif model_variant == "llama_1b_p=1/12":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/12),
+        )
+    elif model_variant == "llama_1b_p=1/11":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/11),
+        )
+    elif model_variant == "llama_1b_p=1/10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/10),
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
