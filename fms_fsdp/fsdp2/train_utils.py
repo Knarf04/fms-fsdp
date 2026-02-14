@@ -12,11 +12,16 @@ import time
 import torch
 import torch.cuda.nccl as nccl
 import torch.distributed as dist
+import torch.nn.functional as F
 
 from fms_fsdp.policies.ac_handler import apply_fsdp_checkpointing
 from fms_fsdp.fsdp2.mixed_precision import (
     fpSixteen, 
     bfSixteen,
+)
+from fms_fsdp.fsdp2.online_loss import (
+    streaming_ce_and_zloss,
+    streaming_forward_kl,
 )
 
 def train(
@@ -33,6 +38,7 @@ def train(
     tokens_seen,
     cp_degree: int = 1,
     is_compiled: bool = False,
+    ref_model=None,
 ):
     if cfg.tracker:
         if cfg.tracker not in ["wandb", "aim"]:
@@ -77,35 +83,143 @@ def train(
 
     is_exp_out = (len(model.backbone.experiments) != 0)
     model.train()
-    ddp_stats = torch.zeros(3).to(local_rank)
+    ddp_stats = torch.zeros(5).to(local_rank)
 
     start = time.time()
     loop_start = time.time()
     train_loss = -1
+
+    do_distill = ref_model is not None and getattr(cfg, 'distill_coeff', 0) > 0
+    cp_rank = rank % cp_degree if cp_degree > 1 else 0
+
     for batch_idx, (input, label) in enumerate(train_loader, start=start_step + 1):
         if batch_idx > cfg.num_steps:
             break
         input = input.to(local_rank)
         label = label.to(local_rank)
 
+        cp_overlap = getattr(cfg, 'cp_overlap', 0)
+        distill_ctx_len = getattr(cfg, 'distill_ctx_len', 4096)
+        # Cap warmup at half the chunk — discarding more than half is wasteful
+        distill_warmup = min(cp_overlap, distill_ctx_len // 2)
+        distill_stride = distill_ctx_len - distill_warmup
+
+        # Split full input into overlapping context-length chunks for distillation
+        needs_copy = do_distill and cp_degree > 1 and distill_warmup > 0 and cp_rank == 0
+        if do_distill:
+            chunk_input = input
+            if needs_copy:
+                # CP rank 0 has fewer tokens (no left overlap) → 1 fewer chunk.
+                # Prepend a copy of the first chunk for batch equalization, and
+                # shift real chunks right so that after warmup discard the copy's
+                # [:stride] stitches contiguously with the real chunks.
+                shift = distill_stride - distill_warmup
+
+                # Match chunk count with non-zero cp ranks
+                other_len = chunk_input.size(1) + cp_overlap
+                other_rem = (other_len - distill_ctx_len) % distill_stride
+                other_padded = other_len + (distill_stride - other_rem if other_rem > 0 else 0)
+                n_shifted = (other_padded - distill_ctx_len) // distill_stride  # n_other - 1
+
+                needed = shift + max(0, n_shifted - 1) * distill_stride + distill_ctx_len if n_shifted > 0 else distill_ctx_len
+                if chunk_input.size(1) < needed:
+                    chunk_input = F.pad(chunk_input, (0, needed - chunk_input.size(1)))
+
+                input_chunks = [chunk_input[:, :distill_ctx_len]]  # copy
+                for k in range(n_shifted):
+                    chunk_start = shift + k * distill_stride
+                    input_chunks.append(chunk_input[:, chunk_start : chunk_start + distill_ctx_len])
+            else:
+                # Standard chunking (non-zero cp ranks, or no CP)
+                remainder = (chunk_input.size(1) - distill_ctx_len) % distill_stride
+                if remainder > 0:
+                    chunk_input = F.pad(chunk_input, (0, distill_stride - remainder))
+                input_chunks = [
+                    chunk_input[:, i * distill_stride : i * distill_stride + distill_ctx_len]
+                    for i in range((chunk_input.size(1) - distill_ctx_len) // distill_stride + 1)
+                ]
+
+        # Strip overlap prefix for training — cp_rank 0 has no left overlap
+        if cp_overlap > 0 and cp_rank > 0:
+            input = input[:, cp_overlap:]
+            label = label[:, cp_overlap:]
+
         optimizer.zero_grad()
         if not is_exp_out:
-            output = model(input)
+            h_s = model.backbone(input)
         else:
-            output, exp_out_collect = model(input)
+            h_s, exp_out_collect = model.backbone(input)
 
-        output = output.logits if hasattr(output, "logits") else output
-        ce_loss = torch.nn.CrossEntropyLoss()
-        loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
-        loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
+        # ---- streaming CE + zloss ----
+        W_s = model.lm_head.weight  # (V,d)
+        vchunk = getattr(cfg, "vocab_chunk", 8192)
+        ignore_index = -100
+
+        loss, _, _, _ = streaming_ce_and_zloss(
+            h_s=h_s,
+            W_s=W_s,
+            labels=label,
+            ignore_index=ignore_index,
+            zl_coeff=getattr(cfg, "zl_coeff", 0.0),
+            vchunk=vchunk,
+        )
+        nce_loss = float(loss.item())  # for logging
+
+        # ---- distillation ----
+        distill_loss = None
+        if do_distill:
+            batch_size = input.size(0)
+
+            ref_input = torch.cat(input_chunks, dim=0)
+
+            with torch.no_grad():
+                h_t = ref_model.backbone(ref_input)
+                n_chunks = len(input_chunks)
+                h_t = h_t.view(n_chunks, batch_size, distill_ctx_len, -1)
+
+                if needs_copy:
+                    h_t[0, :, distill_warmup:, :] = h_t[0, :, :distill_stride, :]
+
+                h_t = h_t[:, :, distill_warmup:, :]  # (n_chunks, B, stride, d)
+
+                # stitch to (B, T, d)
+                h_t = h_t.permute(1, 0, 2, 3).contiguous().view(batch_size, -1, h_t.size(-1))
+                h_t = h_t[:, :h_s.size(1), :]
+                h_t_stitched = h_t
+
+            # forward KL(pt||ps)
+            W_t = ref_model.lm_head.weight
+
+            # mask: only distill where labels are valid (recommended)
+            mask_bt = label.ne(ignore_index)
+            # ensure mask matches h_s length
+            mask_bt = mask_bt[:, :h_s.size(1)]
+
+            temperature = getattr(cfg, "distill_temperature", 1.0)
+
+            distill_loss = streaming_forward_kl(
+                h_t=h_t_stitched,
+                W_t=W_t,
+                h_s=h_s,
+                W_s=W_s,
+                mask_bt=mask_bt,
+                temperature=temperature,
+                vchunk=vchunk,
+            )
+
+            loss = loss + getattr(cfg, "distill_coeff", 0.0) * distill_loss
+
         loss.backward()
 
         ddp_stats[1] += torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_thresh).full_tensor().item()
         optimizer.step()
         scheduler.step()
 
-        ddp_stats[0] += loss.item()
+        ddp_stats[0] += loss.detach()
         ddp_stats[2] += 1
+        ddp_stats[3] += nce_loss
+        if do_distill:
+            ddp_stats[4] += distill_loss.detach()
 
         if profiler:
             profiler.step()
@@ -161,10 +275,16 @@ def train(
                     int(new_tokens_seen / elapsed_time * 3600 * 24),
                 )
                 print(f"Total tok/step: {world_size * cfg.batch_size * cfg.seq_length}")
+                current_nce = (ddp_stats[3] / ddp_stats[2]).item()
+                print("ce_loss:", current_nce)
+                if do_distill:
+                    current_distill = (ddp_stats[4] / ddp_stats[2]).item()
+                    print("distill_loss:", current_distill)
                 if cfg.tracker:
                     vals_to_track = {
                         "learning rate": current_lr,
                         "loss": current_loss,
+                        "nce_loss": current_nce,
                         "gradient norm": current_gnorm,
                         "token seen": total_tokens_seen,
                         "current throughput (token per gpu per sec)": current_throughput,
@@ -172,6 +292,8 @@ def train(
                         "gpu reserved memory": reserved_mem,
                         "gpu allocated memory": allocated_mem,
                     }
+                    if do_distill:
+                        vals_to_track["distill_loss"] = current_distill
                     if cfg.tracker == "wandb":
                         tracker_fn = wandb.log
                     elif cfg.tracker == "aim":

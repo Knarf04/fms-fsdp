@@ -167,22 +167,32 @@ def main(**kwargs):
         return False
 
     # Cast buffers to match FSDP1 behavior (FSDP2 lacks buffer_dtype in MixedPrecisionPolicy)
-    model = mixed_precision_buffer(model)
+    # model = mixed_precision_buffer(model)
     for name, module in model.named_modules():
         if module is model:
             continue
 
         if lambda_fn(name, module):
             fully_shard(
-                module, 
-                mesh=fsdp_mesh, 
+                module,
+                mesh=fsdp_mesh,
                 mp_policy=mixed_precision_policy,
                 reshard_after_forward=True
             )
+    # Shard backbone as its own FSDP unit so that model.backbone(input)
+    # triggers FSDP's parameter gather (e.g. for backbone.norm_f).
+    # Must come after its children (Block, Embedding) are sharded and
+    # before the root model is sharded.
     fully_shard(
-        model, 
-        mesh=fsdp_mesh, 
-        mp_policy=mixed_precision_policy, 
+        model.backbone,
+        mesh=fsdp_mesh,
+        mp_policy=mixed_precision_policy,
+        reshard_after_forward=True,
+    )
+    fully_shard(
+        model,
+        mesh=fsdp_mesh,
+        mp_policy=mixed_precision_policy,
         reshard_after_forward=True
     )
     if rank == 0:
@@ -190,6 +200,80 @@ def main(**kwargs):
 
     # FSDP2: Register generate() for param sharding
     register_fsdp_forward_method(model, "generate")
+
+    # Reference model for distillation (no CP, eval mode, FSDP for memory)
+    ref_model = None
+    if cfg.ref_model_variant:
+        if rank == 0:
+            print(f"--> loading reference model: {cfg.ref_model_variant}")
+        ref_config_data = get_model_config(cfg.ref_model_variant)
+        ref_mamba_config = MambaConfig(**ref_config_data)
+
+        if cfg.low_cpu_fsdp:
+            with torch.device("meta"):
+                ref_model = MambaLMHeadModel(ref_mamba_config)
+        else:
+            ref_model = MambaLMHeadModel(ref_mamba_config)
+
+        if cfg.low_cpu_fsdp:
+            ref_model.to_empty(device=torch.cuda.current_device())
+
+        # HSDP for ref model: DP over inter-node, FSDP over intra-node, no CP
+        ref_mesh = get_2D_world_mesh(world_size) if not requires_2d_mesh else mesh
+        # ref_model = mixed_precision_buffer(ref_model)
+        for name, module in ref_model.named_modules():
+            if module is ref_model:
+                continue
+            if isinstance(module, (CheckpointWrapper, Block, nn.Embedding)) or module is ref_model.lm_head:
+                if isinstance(module, Block) and "_checkpoint_wrapped_module" in name:
+                    continue
+                fully_shard(
+                    module,
+                    mesh=ref_mesh,
+                    mp_policy=mixed_precision_policy,
+                    reshard_after_forward=True,
+                )
+        # Same as student model: shard backbone so ref_model.backbone(input)
+        # triggers FSDP's parameter gather for backbone.norm_f etc.
+        fully_shard(
+            ref_model.backbone,
+            mesh=ref_mesh,
+            mp_policy=mixed_precision_policy,
+            reshard_after_forward=True,
+        )
+        fully_shard(
+            ref_model,
+            mesh=ref_mesh,
+            mp_policy=mixed_precision_policy,
+            reshard_after_forward=True,
+        )
+
+        # Load ref model checkpoint
+        ref_ckpt_path = cfg.ref_ckpt_load_path or cfg.ckpt_load_path
+        ref_save_dir = os.path.dirname(ref_ckpt_path) if os.path.isfile(ref_ckpt_path) else ref_ckpt_path
+        ref_checkpointer = Checkpointer_FSDP2(
+            ref_save_dir, 1000, cfg.sharding_strategy, rank, local_rank,
+            mesh=fsdp_mesh if cfg.sharding_strategy == "hsdp" else None,
+        )
+        ref_model, _, _, _, _, _ = ref_checkpointer.load(
+            ref_model,
+            None,
+            None,
+            path=(
+                os.path.join(ref_ckpt_path, "checkpoints/")
+                if not os.path.isfile(ref_ckpt_path)
+                else ref_ckpt_path
+            ),
+            strict=False,
+        )
+
+        ref_model.eval()
+        for p in ref_model.parameters():
+            p.requires_grad_(False)
+
+        if rank == 0:
+            ref_params = sum(p.numel() for p in ref_model.parameters())
+            print(f"--> ref model has {ref_params / 1e6} Million params (frozen)")
 
     # torch compile
     if cfg.use_torch_compile:
@@ -319,6 +403,7 @@ def main(**kwargs):
         tokens_seen,
         cp_degree,
         is_compiled=cfg.use_torch_compile,
+        ref_model=ref_model,
     )
 
     checkpointer.save_single_file(cfg.num_steps, model, is_compiled=cfg.use_torch_compile)

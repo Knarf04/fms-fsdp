@@ -95,6 +95,13 @@ class train_config:
     cp_attn_impl: str = "zigzag"  # "zigzag" or "ring"
     cp_over_world: bool = False
 
+    # reference model for distillation (no CP, eval mode)
+    cp_overlap: int = 0  # number of tokens to overlap between adjacent CP chunks
+    ref_model_variant: str = ""
+    ref_ckpt_load_path: str = ""
+    distill_coeff: float = 0.0
+    distill_ctx_len: int = 0  # context window for ref model chunks; sliding stride = ctx_len - cp_overlap
+
     # huggingface
     hf_load_path: str = ""
 

@@ -177,8 +177,13 @@ def get_data_loader(cfg, rank, world_size, dp_degree, postprocess=[causal_lm]):
 
     # Apply CP chunking if using CP
     if do_cp:
+        overlap = getattr(cfg, 'cp_overlap', 0)
         def chunk(x):
-            return x[(cp_rank*x.size(0))//cp_worldsize : ((cp_rank+1)*x.size(0))//cp_worldsize]
+            seq_len = x.size(0)
+            stride = seq_len // cp_worldsize
+            start = max(0, cp_rank * stride - overlap)
+            end = min(seq_len, (cp_rank + 1) * stride)
+            return x[start:end]
         data = PreprocessDataset(data, lambda x: (chunk(x[0]), chunk(x[1])))
 
     # Enable auto-saving
