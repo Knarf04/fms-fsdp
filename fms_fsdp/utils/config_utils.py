@@ -734,6 +734,110 @@ def get_model_config(model_variant):
             prune=True,
             prune_thresh=float(1/10),
         )
+    elif model_variant == "llama_1b_p=1/9":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/9),
+        )
+    elif model_variant == "llama_1b_p=1/8":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/8),
+        )
+    elif model_variant == "llama_1b_p=1/7":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/7),
+        )
+    elif model_variant == "llama_1b_p=1/6":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/6),
+        )
+    elif model_variant == "llama_1b_p=1/5":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/5),
+        )
+    elif model_variant == "llama_1b_p=1/4":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/4),
+        )
+    elif model_variant == "llama_1b_p=1/3":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/3),
+        )
+    elif model_variant == "llama_1b_p=1/2":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            prune=True,
+            prune_thresh=float(1/2),
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
