@@ -22,6 +22,7 @@ from fms_fsdp.fsdp2.mixed_precision import (
 from fms_fsdp.fsdp2.online_loss import (
     streaming_ce_and_zloss,
     streaming_forward_kl,
+    streaming_reverse_kl,
 )
 
 def train(
@@ -196,8 +197,10 @@ def train(
             mask_bt = mask_bt[:, :h_s.size(1)]
 
             temperature = getattr(cfg, "distill_temperature", 1.0)
+            kl_type     = getattr(cfg, "distill_kl_type", "forward")  # "forward" or "reverse"
 
-            distill_loss = streaming_forward_kl(
+            kl_fn = streaming_reverse_kl if kl_type == "reverse" else streaming_forward_kl
+            distill_loss = kl_fn(
                 h_t=h_t_stitched,
                 W_t=W_t,
                 h_s=h_s,

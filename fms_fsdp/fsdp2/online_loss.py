@@ -334,3 +334,141 @@ def streaming_forward_kl(h_t, W_t, h_s, W_s, mask_bt, temperature: float, vchunk
     return _StreamingForwardKLFunc.apply(
         h_s, W_s, h_t, W_t, mask_bt, temperature, vchunk,
     )
+
+
+class _StreamingReverseKLFunc(torch.autograd.Function):
+    """
+    Custom autograd for streaming reverse KL: KL(ps || pt).
+    Peak memory O(B*T*vchunk). Correct under CP (all-gather W).
+
+    Gradient derivation:
+      Let q_v = log(ps_v / pt_v),  KL_token_bt = Σ_v ps_v * q_v  (per-token scalar).
+
+      ∂KL(ps‖pt)/∂h_s_bt  ∝  Σ_v ps_v * (q_v − KL_token_bt) * W_s_v / T
+      ∂KL(ps‖pt)/∂W_s_v   ∝  Σ_bt mask_bt * ps_v * (q_v − KL_token_bt) * h_s_bt
+
+    The per-token KL tensor (BT,) is saved from forward to avoid recomputing it
+    in the backward loop.  All-gather / reduce-scatter for W_s follows the same
+    pattern as _StreamingForwardKLFunc.
+    """
+
+    @staticmethod
+    def forward(ctx, h_s, W_s, h_t, W_t, mask_bt, temperature, vchunk):
+        Ttemp = float(temperature)
+
+        W_s_full, pg, W_s_mesh, W_s_placements = _get_full_weight(W_s)
+        W_t_full, _, _, _                       = _get_full_weight(W_t)
+
+        h_s_sc = h_s / Ttemp
+        h_t_sc = h_t / Ttemp
+        h_s32  = h_s_sc.float()
+        h_t32  = h_t_sc.float()
+        W_s32  = W_s_full.float()
+        W_t32  = W_t_full.float()
+
+        logZ_s = _stream_logsumexp(h_s_sc, W_s_full, vchunk)
+        logZ_t = _stream_logsumexp(h_t_sc, W_t_full, vchunk)
+
+        V  = W_s_full.shape[0]
+        BT = h_s.shape[0] * h_s.shape[1]
+        denom = mask_bt.sum().clamp_min(1)
+
+        logZ_s_flat = logZ_s.reshape(-1)                      # (BT,)
+        logZ_t_flat = logZ_t.reshape(-1)                      # (BT,)
+        h_s32_flat  = h_s32.reshape(-1, h_s.shape[2])         # (BT, d)
+        h_t32_flat  = h_t32.reshape(-1, h_t.shape[2])         # (BT, d)
+        mask_flat   = mask_bt.reshape(-1).float()             # (BT,)
+
+        # Accumulate per-token KL(ps||pt) = Σ_v ps_v * log(ps_v / pt_v)
+        kl_token = torch.zeros(BT, device=h_s.device, dtype=torch.float32)
+        for v0 in range(0, V, vchunk):
+            v1     = min(v0 + vchunk, V)
+            log_ps = h_s32_flat @ W_s32[v0:v1].T - logZ_s_flat.unsqueeze(-1)  # (BT, vc)
+            log_pt = h_t32_flat @ W_t32[v0:v1].T - logZ_t_flat.unsqueeze(-1)  # (BT, vc)
+            ps     = log_ps.exp()
+            kl_token.add_((ps * (log_ps - log_pt)).sum(-1))
+
+        kl_sum = (kl_token * mask_flat).sum()
+        kl     = (kl_sum / denom) * (Ttemp * Ttemp)
+
+        ctx.save_for_backward(h_s, W_s_full, h_t, W_t_full, mask_bt, logZ_s, logZ_t, kl_token)
+        ctx.temperature       = Ttemp
+        ctx.vchunk            = vchunk
+        ctx.pg                = pg
+        ctx.W_s_mesh          = W_s_mesh
+        ctx.W_s_placements    = W_s_placements
+        return kl
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        h_s, W_s_full, h_t, W_t_full, mask_bt, logZ_s, logZ_t, kl_token = ctx.saved_tensors
+        Ttemp  = ctx.temperature
+        vchunk = ctx.vchunk
+        pg     = ctx.pg
+        d      = h_s.shape[2]
+        V      = W_s_full.shape[0]
+
+        denom = mask_bt.sum().clamp_min(1)
+        scale = float(grad_output) * (Ttemp * Ttemp) / denom
+
+        h_s32 = (h_s / Ttemp).float().reshape(-1, d)          # (BT, d)
+        h_t32 = (h_t / Ttemp).float().reshape(-1, h_t.shape[2])  # (BT, d)
+        W_s32 = W_s_full.float()
+        W_t32 = W_t_full.float()
+
+        logZ_s_flat = logZ_s.reshape(-1)
+        logZ_t_flat = logZ_t.reshape(-1)
+        # coeff_bt = mask_bt * scale  (the 1/T for grad_h comes from dividing by Ttemp below,
+        # matching the 1/T that appears via h_s32 = h_s/T for grad_W — same pattern as
+        # _StreamingForwardKLFunc)
+        coeff = mask_bt.reshape(-1).float() * scale            # (BT,)
+
+        grad_h_s32 = torch.zeros(h_s32.shape,    device=h_s.device, dtype=torch.float32)
+        grad_W_s32 = torch.zeros(W_s_full.shape, device=h_s.device, dtype=torch.float32)
+
+        for v0 in range(0, V, vchunk):
+            v1 = min(v0 + vchunk, V)
+
+            log_ps = h_s32 @ W_s32[v0:v1].T - logZ_s_flat.unsqueeze(-1)  # (BT, vc)
+            log_pt = h_t32 @ W_t32[v0:v1].T - logZ_t_flat.unsqueeze(-1)  # (BT, vc)
+            ps     = log_ps.exp_()                                          # (BT, vc)
+            q      = log_ps - log_pt                                        # (BT, vc)
+
+            # delta[bt, v] = ps_v * (q_v - KL_token_bt) * coeff_bt
+            delta = ps.mul_(q.sub_(kl_token.unsqueeze(-1))).mul_(coeff.unsqueeze(-1))
+
+            grad_h_s32.add_((delta @ W_s32[v0:v1]) / Ttemp)  # 1/T for ∂h_s
+            grad_W_s32[v0:v1].add_(delta.T @ h_s32)           # h_s32=h_s/T gives correct scale
+
+        grad_h_out = grad_h_s32.to(h_s.dtype).reshape_as(h_s)
+
+        if pg is not None:
+            grad_W_local = funcol.reduce_scatter_tensor(
+                grad_W_s32, reduceOp="sum", scatter_dim=0, group=pg
+            ).to(W_s_full.dtype)
+            from torch.distributed.tensor import DTensor
+            grad_W_out = DTensor.from_local(grad_W_local, ctx.W_s_mesh, ctx.W_s_placements)
+        else:
+            grad_W_out = grad_W_s32.to(W_s_full.dtype)
+
+        return grad_h_out, grad_W_out, None, None, None, None, None
+
+
+def streaming_reverse_kl(h_t, W_t, h_s, W_s, mask_bt, temperature: float, vchunk: int):
+    """
+    Exact reverse KL: KL( ps || pt ) with temperature, without materializing logits.
+      ps = softmax((h_s W_s^T)/T), pt = softmax((h_t W_t^T)/T)
+    mask_bt: (B, T) bool mask of positions to include (e.g. label != -100)
+    Returns: scalar KL averaged over masked tokens.
+
+    Uses a custom autograd.Function so peak memory is O(B*T*vchunk).
+    When W_s / W_t are FSDP2 Shard(0) DTensors, all-gathers both to full vocab.
+
+    Compared to forward KL(pt‖ps):
+      - Mode-seeking: student concentrates on dominant teacher modes.
+      - Lower loss magnitude when student is diffuse (high-entropy), so the
+        gradient is gentler early in training when teacher/student gap is large.
+    """
+    return _StreamingReverseKLFunc.apply(
+        h_s, W_s, h_t, W_t, mask_bt, temperature, vchunk,
+    )
