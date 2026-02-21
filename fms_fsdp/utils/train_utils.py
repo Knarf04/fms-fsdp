@@ -16,8 +16,6 @@ import torch.distributed as dist
 from torch.distributed.fsdp import ShardingStrategy
 
 from fms_fsdp.policies import *
-from fms_fsdp.experiments.param_freeze_utils import *
-
 
 def train(
     cfg,
