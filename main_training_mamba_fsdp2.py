@@ -286,13 +286,13 @@ def main(**kwargs):
     # Optimizer: build parameter groups with per-pattern LR scaling.
     # cfg.lr_groups format: "pattern1:scale1;pattern2:scale2"
     # First match on param name wins; unmatched params get scale 1.0. Scale 0.0 freezes params.
-    lr_groups = _parse_lr_groups(cfg.lr_groups)
+    lr_groups = parse_lr_groups(cfg.lr_groups)
     is_no_decay = lambda name: any(k in name for k in ('A_log', 'D', 'dt_bias'))
 
     # Bucket params by (lr_scale, weight_decay)
     param_buckets = {}
     for name, param in model.named_parameters():
-        lr_scale = _get_lr_scale(name, lr_groups)
+        lr_scale = get_lr_scale(name, lr_groups)
         wd = 0.0 if is_no_decay(name) else 0.1
         param_buckets.setdefault((lr_scale, wd), []).append(param)
 

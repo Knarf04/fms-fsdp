@@ -1,4 +1,4 @@
-def _parse_lr_groups(s):
+def parse_lr_groups(s):
     if not s:
         return []
     groups = []
@@ -7,7 +7,7 @@ def _parse_lr_groups(s):
         groups.append((pattern.strip(), float(scale.strip())))
     return groups
 
-def _get_lr_scale(name, lr_groups):
+def get_lr_scale(name, lr_groups):
     for pattern, scale in lr_groups:
         if pattern in name:
             return scale
