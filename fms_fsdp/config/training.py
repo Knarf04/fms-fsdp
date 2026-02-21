@@ -108,5 +108,7 @@ class train_config:
     # experiment output directory
     exp_out_path: str = ""
 
-    # freeze some of the layers
-    freeze_layer: str = "" 
+    # Per-pattern LR scaling: "pattern1:scale1;pattern2:scale2"
+    # e.g. "embed:0.1;self_attn:0.5;backbone.layers.[0-7]:0.0"
+    # First match wins; unmatched params get scale 1.0. Scale 0.0 freezes the params.
+    lr_groups: str = ""
