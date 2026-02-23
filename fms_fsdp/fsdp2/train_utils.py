@@ -146,59 +146,45 @@ def train(
             label = label[:, cp_overlap:]
 
         optimizer.zero_grad()
-        if not is_exp_out:
-            h_s = model.backbone(input)
-        else:
-            h_s, exp_out_collect = model.backbone(input)
-
-        # ---- streaming CE + zloss ----
-        W_s = model.lm_head.weight  # (V,d)
-        vchunk = getattr(cfg, "vocab_chunk", 8192)
         ignore_index = -100
+        zl_coeff = getattr(cfg, "zl_coeff", 0.0)
 
-        loss, _, _, _ = streaming_ce_and_zloss(
-            h_s=h_s,
-            W_s=W_s,
-            labels=label,
-            ignore_index=ignore_index,
-            zl_coeff=getattr(cfg, "zl_coeff", 0.0),
-            vchunk=vchunk,
-        )
-        nce_loss = float(loss.item())  # for logging
-
-        # ---- distillation ----
         distill_loss = None
         if do_distill:
+            # Distillation: backbone + streaming CE (W_s needed for KL below).
+            W_s = model.lm_head.weight  # (V,d)
+            vchunk = getattr(cfg, "vocab_chunk", 8192)
+            if not is_exp_out:
+                h_s = model.backbone(input)
+            else:
+                h_s, exp_out_collect = model.backbone(input)
+            loss, _, _, _ = streaming_ce_and_zloss(
+                h_s=h_s,
+                W_s=W_s,
+                labels=label,
+                ignore_index=ignore_index,
+                zl_coeff=zl_coeff,
+                vchunk=vchunk,
+            )
+
             batch_size = input.size(0)
-
             ref_input = torch.cat(input_chunks, dim=0)
-
             with torch.no_grad():
                 h_t = ref_model.backbone(ref_input)
                 n_chunks = len(input_chunks)
                 h_t = h_t.view(n_chunks, batch_size, distill_ctx_len, -1)
-
                 if needs_copy:
                     h_t[0, :, distill_warmup:, :] = h_t[0, :, :distill_stride, :]
-
                 h_t = h_t[:, :, distill_warmup:, :]  # (n_chunks, B, stride, d)
-
                 # stitch to (B, T, d)
                 h_t = h_t.permute(1, 0, 2, 3).contiguous().view(batch_size, -1, h_t.size(-1))
                 h_t = h_t[:, :h_s.size(1), :]
                 h_t_stitched = h_t
 
-            # forward KL(pt||ps)
             W_t = ref_model.lm_head.weight
-
-            # mask: only distill where labels are valid (recommended)
-            mask_bt = label.ne(ignore_index)
-            # ensure mask matches h_s length
-            mask_bt = mask_bt[:, :h_s.size(1)]
-
+            mask_bt = label.ne(ignore_index)[:, :h_s.size(1)]
             temperature = getattr(cfg, "distill_temperature", 1.0)
-            kl_type     = getattr(cfg, "distill_kl_type", "forward")  # "forward" or "reverse"
-
+            kl_type = getattr(cfg, "distill_kl_type", "forward")  # "forward" or "reverse"
             kl_fn = streaming_reverse_kl if kl_type == "reverse" else streaming_forward_kl
             distill_loss = kl_fn(
                 h_t=h_t_stitched,
@@ -209,8 +195,26 @@ def train(
                 temperature=temperature,
                 vchunk=vchunk,
             )
-
             loss = loss + getattr(cfg, "distill_coeff", 0.0) * distill_loss
+        else:
+            # No distillation: call model(input) directly so FSDP2 manages the
+            # lm_head all-gather through its own forward hooks, avoiding the
+            # saved-tensor lifecycle conflict with activation checkpointing.
+            if not is_exp_out:
+                output = model(input)
+            else:
+                output, exp_out_collect = model(input)
+            logits = output.logits.float()  # (B, T, V)
+            loss = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                label.view(-1),
+                ignore_index=ignore_index,
+            )
+            if zl_coeff > 0.0:
+                logZ = torch.logsumexp(logits.view(-1, logits.size(-1)), dim=-1)
+                loss = loss + zl_coeff * logZ.pow(2).mean()
+            del logits
+        nce_loss = float(loss.item())  # for logging
 
         loss.backward()
 
