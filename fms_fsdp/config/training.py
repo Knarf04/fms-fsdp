@@ -112,3 +112,9 @@ class train_config:
     # e.g. "embed:0.1;self_attn:0.5;backbone.layers.[0-7]:0.0"
     # First match wins; unmatched params get scale 1.0. Scale 0.0 freezes the params.
     lr_groups: str = ""
+
+    # UPI training (main_training_upi_fsdp2.py)
+    # upi_target_multiplier > 1 enables trainable upi_scale_raw params in [1, M].
+    # upi_load_path: path to a upi_state.pth to warm-start from a prior upi run.
+    upi_target_multiplier: float = 0.0
+    upi_load_path: str = ""
