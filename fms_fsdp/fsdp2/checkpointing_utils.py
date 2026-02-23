@@ -231,15 +231,29 @@ class Checkpointer_FSDP2(Checkpointer):
         save_name = os.path.join(pth_path, "consolidated.00.pth")
         save_time = time.time()
 
-        # FSDP2: Full State Dict
+        # FSDP2: Full State Dict (collective — must be called on all ranks)
         options = StateDictOptions(full_state_dict=True, cpu_offload=True)
         target_model = model._orig_mod if is_compiled else model
         model_state = get_model_state_dict(target_model, options=options)
 
         if self.rank == 0:
+            # ------------------------------------------------------------------
+            # upi trainable parameters (upi_scale_raw) are intentionally kept
+            # out of the main model checkpoint to avoid compatibility issues when
+            # loading into a model without the upi experiment.  They are saved
+            # to a separate file instead.  Fixed masks (upi_mask) are
+            # persistent=False buffers so they never appear in model_state.
+            # ------------------------------------------------------------------
+            upi_keys = [k for k in model_state if "upi_scale_raw" in k]
+            if upi_keys:
+                upi_state = {k: model_state[k] for k in upi_keys}
+                torch.save(upi_state, os.path.join(pth_path, "upi_state.pth"))
+            # Filter upi params out of the clean model checkpoint
+            clean_state = {k: v for k, v in model_state.items() if "upi_scale_raw" not in k}
+
             metadata = kwargs
             metadata["step"] = step
-            metadata["model_state"] = model_state
+            metadata["model_state"] = clean_state
             torch.save(metadata, save_name)
         # dist.barrier()
         self.report("Checkpoint written", model_save_time=time.time() - save_time)
