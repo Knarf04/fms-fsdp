@@ -205,18 +205,11 @@ def train(
                 output = model(input)
             else:
                 output, exp_out_collect = model(input)
-            logits = output.logits.float()  # (B, T, V)
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)),
-                label.view(-1),
-                ignore_index=ignore_index,
-            )
-            if zl_coeff > 0.0:
-                logZ = torch.logsumexp(logits.view(-1, logits.size(-1)), dim=-1)
-                loss = loss + zl_coeff * logZ.pow(2).mean()
-            del logits
+            output = output.logits if hasattr(output, "logits") else output
+            ce_loss = torch.nn.CrossEntropyLoss()
+            loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
             nce_loss = float(loss.item())  # CE (+ zloss if enabled)
-
+            loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
         loss.backward()
 
         ddp_stats[1] += torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_thresh).full_tensor().item()
