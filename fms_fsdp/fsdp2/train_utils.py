@@ -195,6 +195,7 @@ def train(
                 temperature=temperature,
                 vchunk=vchunk,
             )
+            nce_loss = float(loss.item())  # CE-only, before distill term
             loss = loss + getattr(cfg, "distill_coeff", 0.0) * distill_loss
         else:
             # No distillation: call model(input) directly so FSDP2 manages the
@@ -214,7 +215,7 @@ def train(
                 logZ = torch.logsumexp(logits.view(-1, logits.size(-1)), dim=-1)
                 loss = loss + zl_coeff * logZ.pow(2).mean()
             del logits
-        nce_loss = float(loss.item())  # for logging
+            nce_loss = float(loss.item())  # CE (+ zloss if enabled)
 
         loss.backward()
 
