@@ -163,7 +163,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -187,7 +187,7 @@ def get_model_config(model_variant):
             "d_model": 1280,
             "d_intermediate": 3072,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -212,7 +212,7 @@ def get_model_config(model_variant):
             "d_model": 1280,
             "d_intermediate": 3072,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -237,7 +237,7 @@ def get_model_config(model_variant):
             "d_model": 1280,
             "d_intermediate": 3072,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {
                 "layer": "Mamba2", 
                 "ngroups": 5,
@@ -265,7 +265,7 @@ def get_model_config(model_variant):
             "d_model": 1280,
             "d_intermediate": 3072,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {
                 "layer": "Mamba2", 
                 "ngroups": 5,
@@ -426,7 +426,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -451,7 +451,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -476,7 +476,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -501,7 +501,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -526,7 +526,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -557,7 +557,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -588,7 +588,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -616,7 +616,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "src_vocab_size": 128256,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -642,45 +642,27 @@ def get_model_config(model_variant):
         }
     elif model_variant == "granite_4_lite":
         model_config = {
-            'attn_cfg': {
-                'causal': True,
-                'head_dim': 128,
-                'num_heads': 32,
-                'num_heads_kv': 8,
-                'out_proj_bias': False,
-                'qkv_proj_bias': False,
-                'rotary_emb_dim': 0,
-                'softmax_scale': 0.08838834764831845
+            "d_model": 4096,
+            "d_intermediate": 14336,
+            "n_layer": 32,
+            "vocab_size": 100352,
+            "ssm_cfg": {"layer": "Mamba2"},
+            "attn_layer_idx": [9, 18, 27],
+            "attn_cfg": {
+                "causal": True,
+                "d_conv": 0,
+                "head_dim": 128,
+                "num_heads": 32,
+                "num_heads_kv": 8,
+                "out_proj_bias": False,
+                "qkv_proj_bias": False,
+                "rotary_emb_dim": 0,
             },
-            'attn_layer_idx': [9, 18, 27],
-            'd_intermediate': 14336,
-            'd_model': 4096,
-            'experiments': {},
-            'fused_add_norm': True,
-            'mlp_cfg': {
-                'multiple_of': 1, 
-                'type': 'gated'
-            },
-            'n_layer': 32,
-            'norm_epsilon': 1e-05,
-            'pad_vocab_size_multiple': 1,
-            'residual_in_fp32': True,
-            'rms_norm': True,
-            'ssm_cfg': {
-                'bias': False,
-                'chunk_size': 256,
-                'conv_bias': True,
-                'd_conv': 4,
-                'd_state': 128,
-                'expand': 2,
-                'headdim': 64,
-                'layer': 'Mamba2',
-                'ngroups': 1,
-                'norm_before_gate': False,
-                'rmsnorm': True
-            },
-            'tie_embeddings': False,
-            'vocab_size': 100352
+            "rms_norm": True,
+            "residual_in_fp32": True,
+            "fused_add_norm": True,
+            "pad_vocab_size_multiple": 16,
+            "tie_embeddings": False,
         }
     elif model_variant == "nemotron_h_8b":
         model_config = {
@@ -722,6 +704,57 @@ def get_model_config(model_variant):
             },
             'tie_embeddings': False,
             'vocab_size': 131072
+        }
+    elif model_variant == "gdn_1b":
+        model_config = {
+            "hidden_size": 1280,
+            "intermediate_size": 3072,
+            "num_hidden_layers": 32,
+            "num_heads": 8,
+            "head_dim": 128,
+            "vocab_size": 128256,
+            "max_position_embeddings": 4096,
+        }
+    elif model_variant == "gdn_h_1b":
+        model_config = {
+            "hidden_size": 1280,
+            "intermediate_size": 3072,
+            "num_hidden_layers": 32,
+            "num_heads": 8,
+            "head_dim": 128,
+            "vocab_size": 128256,
+            "max_position_embeddings": 4096,
+            "attn": {
+                "layers": [9, 18, 27],
+                "num_heads": 16,
+                "num_kv_heads": 4, 
+                "rope_theta": 500000.0,  
+            },
+        }
+    elif model_variant == "mamba_1b_vllm":
+        model_config = {
+            "d_model": 1280,
+            "d_intermediate": 3072,
+            "n_layer": 32,
+            "src_vocab_size": 100352,
+            "ssm_cfg": {"layer": "Mamba2"},
+            "attn_layer_idx": [9, 18, 27],
+            "attn_cfg": {
+                "causal": True,
+                "d_conv": 0,
+                "head_dim": 128,
+                "num_heads": 16,
+                "num_heads_kv": 4,
+                "out_proj_bias": False,
+                "qkv_proj_bias": False,
+                "rotary_emb_dim": 0,
+                "rotary_emb_base": 10_000,
+            },
+            "rms_norm": True,
+            "residual_in_fp32": True,
+            "fused_add_norm": True,
+            "pad_vocab_size_multiple": 16,
+            "tie_embeddings": False,
         }
     else:
         raise ValueError(f"model variant {model_variant} not supported.")

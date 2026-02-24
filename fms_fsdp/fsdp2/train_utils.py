@@ -75,7 +75,13 @@ def train(
                 )
                 run["hparams"] = asdict(cfg)
 
-    is_exp_out = (len(model.backbone.experiments) != 0)
+    # Guard against models that don't have backbone.experiments (e.g. fla GatedDeltaNet).
+    # Mamba-based models expose model.backbone.experiments; HF-style models (GDN) do not.
+    is_exp_out = (
+        hasattr(model, "backbone")
+        and hasattr(model.backbone, "experiments")
+        and len(model.backbone.experiments) != 0
+    )
     model.train()
     ddp_stats = torch.zeros(3).to(local_rank)
 
