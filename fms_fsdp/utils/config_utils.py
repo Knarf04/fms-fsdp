@@ -711,7 +711,7 @@ def get_model_config(model_variant):
             "d_model": 1280,
             "d_intermediate": 3072,
             "n_layer": 32,
-            "src_vocab_size": 100352,
+            "vocab_size": 100352,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
