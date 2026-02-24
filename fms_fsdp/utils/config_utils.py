@@ -710,8 +710,8 @@ def get_model_config(model_variant):
             "hidden_size": 1280,
             "intermediate_size": 3072,
             "num_hidden_layers": 32,
-            "num_heads": 8,
-            "head_dim": 128,
+            "num_heads": 4,
+            "head_dim": 256,
             "vocab_size": 128256,
             "max_position_embeddings": 4096,
         }
@@ -720,8 +720,8 @@ def get_model_config(model_variant):
             "hidden_size": 1280,
             "intermediate_size": 3072,
             "num_hidden_layers": 32,
-            "num_heads": 8,
-            "head_dim": 128,
+            "num_heads": 4,
+            "head_dim": 256,
             "vocab_size": 128256,
             "max_position_embeddings": 4096,
             "attn": {
