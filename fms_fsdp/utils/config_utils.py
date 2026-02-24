@@ -705,7 +705,7 @@ def get_model_config(model_variant):
             'tie_embeddings': False,
             'vocab_size': 131072
         }
-    elif model_variant == "gdn_1b":
+    elif model_variant == "gdn_1b": # 1042.64M
         model_config = {
             "hidden_size": 1280,
             "intermediate_size": 3072,
@@ -715,7 +715,7 @@ def get_model_config(model_variant):
             "vocab_size": 128256,
             "max_position_embeddings": 4096,
         }
-    elif model_variant == "gdn_h_1b":
+    elif model_variant == "gdn_h_1b": # 1023.36M
         model_config = {
             "hidden_size": 1280,
             "intermediate_size": 3072,
