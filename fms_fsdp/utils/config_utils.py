@@ -645,7 +645,7 @@ def get_model_config(model_variant):
             "d_model": 4096,
             "d_intermediate": 14336,
             "n_layer": 32,
-            "vocab_size": 128256,
+            "vocab_size": 100352,
             "ssm_cfg": {"layer": "Mamba2"},
             "attn_layer_idx": [9, 18, 27],
             "attn_cfg": {
@@ -657,7 +657,6 @@ def get_model_config(model_variant):
                 "out_proj_bias": False,
                 "qkv_proj_bias": False,
                 "rotary_emb_dim": 0,
-                "rotary_emb_base": 10_000,
             },
             "rms_norm": True,
             "residual_in_fp32": True,
@@ -706,7 +705,7 @@ def get_model_config(model_variant):
             'tie_embeddings': False,
             'vocab_size': 131072
         }
-    elif model_variant == "mamba_1b_vllm":
+    elif model_variant == "g4l_1b_vllm":
         model_config = {
             "d_model": 1280,
             "d_intermediate": 3072,
