@@ -707,7 +707,7 @@ def get_model_config(model_variant):
         }
     elif model_variant == "g4l_1b_vllm":
         model_config = {
-            "d_model": 1280,
+            "d_model": 1024,
             "d_intermediate": 3072,
             "n_layer": 32,
             "vocab_size": 100352,
@@ -716,9 +716,9 @@ def get_model_config(model_variant):
             "attn_cfg": {
                 "causal": True,
                 "d_conv": 0,
-                "head_dim": 128,
-                "num_heads": 16,
-                "num_heads_kv": 4,
+                "head_dim": 64,     # 16 * 64 = 1024 = d_model; out_proj stays square
+                "num_heads": 16,    # divisible by tp=8
+                "num_heads_kv": 8,  # divisible by tp=8; 2:1 GQA ratio
                 "out_proj_bias": False,
                 "qkv_proj_bias": False,
                 "rotary_emb_dim": 0,
