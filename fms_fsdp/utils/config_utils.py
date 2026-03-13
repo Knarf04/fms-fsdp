@@ -725,7 +725,7 @@ def get_model_config(model_variant):
             "vocab_size": 128256,
             "max_position_embeddings": 4096,
             "attn": {
-                "layers": [9, 18, 27],
+                "layers": [4, 12, 20, 28],
                 "num_heads": 16,
                 "num_kv_heads": 4, 
                 "rope_theta": 500000.0,  
