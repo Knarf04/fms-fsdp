@@ -731,6 +731,22 @@ def get_model_config(model_variant):
                 "rope_theta": 500000.0,  
             },
         }
+    elif model_variant == "gdn_h_1b_long": # 1023.36M
+        model_config = {
+            "hidden_size": 1280,
+            "intermediate_size": 3072,
+            "num_hidden_layers": 32,
+            "num_heads": 4,
+            "head_dim": 256,
+            "vocab_size": 128256,
+            "max_position_embeddings": 4096,
+            "attn": {
+                "layers": [4, 12, 20, 28],
+                "num_heads": 10,
+                "num_kv_heads": 5, 
+                "rope_theta": 10000.0,  
+            },
+        }
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
