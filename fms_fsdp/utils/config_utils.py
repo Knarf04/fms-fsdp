@@ -1135,7 +1135,7 @@ def get_model_config(model_variant):
             kv_eviction_heavy_ratio=0.25,
             kv_eviction_recent_ratio=0.25,
         )
-        elif model_variant == "llama_1b_snapKV_high":
+    elif model_variant == "llama_1b_snapKV_high":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
@@ -1259,7 +1259,7 @@ def get_model_config(model_variant):
             kv_eviction_heavy_ratio=0.25,
             kv_eviction_recent_ratio=0.25,
         )
-        elif model_variant == "llama_1b_snapKV_high_yarn":
+    elif model_variant == "llama_1b_snapKV_high_yarn":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
