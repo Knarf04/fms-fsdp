@@ -1075,7 +1075,7 @@ def get_model_config(model_variant):
             "pad_vocab_size_multiple": 16,
             "tie_embeddings": False,
         }
-    elif model_variant == "llama_1b_snapKV":
+    elif model_variant == "llama_1b_snapKV_low":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
@@ -1086,12 +1086,12 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="snapkv",
-            kv_eviction_sparsity_ratio=0.8,
-            kv_eviction_window_size=64,
-            kv_eviction_kernel_size=5,
-            kv_eviction_pooling="avgpool",
+            kv_eviction_sparsity_ratio=0.5,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
         )
-    elif model_variant == "llama_1b_h2o":
+    elif model_variant == "llama_1b_h2o_low":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
@@ -1102,10 +1102,10 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="h2o",
-            kv_eviction_heavy_ratio=0.4,
-            kv_eviction_recent_ratio=0.4,
+            kv_eviction_heavy_ratio=0.25,
+            kv_eviction_recent_ratio=0.25,
         )
-    elif model_variant == "llama_1b_pyramid_snapKV":
+    elif model_variant == "llama_1b_pyramid_snapKV_low":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
@@ -1116,12 +1116,12 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="pyramid_snapkv",
-            kv_eviction_sparsity_ratio=0.8,
-            kv_eviction_window_size=64,
-            kv_eviction_kernel_size=5,
-            kv_eviction_pooling="avgpool",
+            kv_eviction_sparsity_ratio=0.5,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
         )
-    elif model_variant == "llama_1b_pyramid_h2o":
+    elif model_variant == "llama_1b_pyramid_h2o_low":
         model_config = LLaMAConfig(
             src_vocab_size=128256,
             emb_dim=1280,
@@ -1132,8 +1132,196 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="pyramid_h2o",
-            kv_eviction_heavy_ratio=0.4,
-            kv_eviction_recent_ratio=0.4,
+            kv_eviction_heavy_ratio=0.25,
+            kv_eviction_recent_ratio=0.25,
+        )
+        elif model_variant == "llama_1b_snapKV_high":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_h2o_high":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
+        )
+    elif model_variant == "llama_1b_pyramid_snapKV_high":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="pyramid_snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_pyramid_h2o_high":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="pyramid_h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
+        )
+    elif model_variant == "llama_1b_snapKV_low_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="snapkv",
+            kv_eviction_sparsity_ratio=0.5,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_h2o_low_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="h2o",
+            kv_eviction_heavy_ratio=0.25,
+            kv_eviction_recent_ratio=0.25,
+        )
+    elif model_variant == "llama_1b_pyramid_snapKV_low_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_snapkv",
+            kv_eviction_sparsity_ratio=0.5,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_pyramid_h2o_low_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_h2o",
+            kv_eviction_heavy_ratio=0.25,
+            kv_eviction_recent_ratio=0.25,
+        )
+        elif model_variant == "llama_1b_snapKV_high_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_h2o_high_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
+        )
+    elif model_variant == "llama_1b_pyramid_snapKV_high_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_pyramid_h2o_high_yarn":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
         )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
