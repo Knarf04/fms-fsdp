@@ -1075,6 +1075,66 @@ def get_model_config(model_variant):
             "pad_vocab_size_multiple": 16,
             "tie_embeddings": False,
         }
+    elif model_variant == "llama_1b_snapKV":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=64,
+            kv_eviction_kernel_size=5,
+            kv_eviction_pooling="avgpool",
+        )
+    elif model_variant == "llama_1b_h2o":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
+        )
+    elif model_variant == "llama_1b_pyramid_snapKV":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="pyramid_snapkv",
+            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_window_size=64,
+            kv_eviction_kernel_size=5,
+            kv_eviction_pooling="avgpool",
+        )
+    elif model_variant == "llama_1b_pyramid_h2o":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            kv_eviction="pyramid_h2o",
+            kv_eviction_heavy_ratio=0.1,
+            kv_eviction_recent_ratio=0.1,
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
