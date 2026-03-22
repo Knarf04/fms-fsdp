@@ -1086,7 +1086,7 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="snapkv",
-            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_sparsity_ratio=0.8,
             kv_eviction_window_size=64,
             kv_eviction_kernel_size=5,
             kv_eviction_pooling="avgpool",
@@ -1102,8 +1102,8 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="h2o",
-            kv_eviction_heavy_ratio=0.1,
-            kv_eviction_recent_ratio=0.1,
+            kv_eviction_heavy_ratio=0.4,
+            kv_eviction_recent_ratio=0.4,
         )
     elif model_variant == "llama_1b_pyramid_snapKV":
         model_config = LLaMAConfig(
@@ -1116,7 +1116,7 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="pyramid_snapkv",
-            kv_eviction_sparsity_ratio=0.2,
+            kv_eviction_sparsity_ratio=0.8,
             kv_eviction_window_size=64,
             kv_eviction_kernel_size=5,
             kv_eviction_pooling="avgpool",
@@ -1132,8 +1132,8 @@ def get_model_config(model_variant):
             max_expected_seq_len=4096,
             rope_theta=500000.0,
             kv_eviction="pyramid_h2o",
-            kv_eviction_heavy_ratio=0.1,
-            kv_eviction_recent_ratio=0.1,
+            kv_eviction_heavy_ratio=0.4,
+            kv_eviction_recent_ratio=0.4,
         )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
