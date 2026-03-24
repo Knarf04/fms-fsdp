@@ -101,5 +101,8 @@ class train_config:
     # experiment output directory
     exp_out_path: str = ""
 
+    # retention loss
+    retention_coeff: float = -1  # coefficient; -1 means disabled
+
     # freeze some of the layers
-    freeze_layer: str = "" 
+    freeze_layer: str = ""

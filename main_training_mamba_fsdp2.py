@@ -114,6 +114,11 @@ def main(**kwargs):
     # get model
     config_data = get_model_config(cfg.model_variant)
     mamba_config = MambaConfig(**config_data)
+
+    # Enable retention_loss in the model's experiments dict
+    if cfg.retention_coeff > 0:
+        mamba_config.experiments["retention_loss"] = True
+
     if rank == 0:
         print(mamba_config)
 

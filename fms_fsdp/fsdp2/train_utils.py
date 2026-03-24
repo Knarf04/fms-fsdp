@@ -12,12 +12,61 @@ import time
 import torch
 import torch.cuda.nccl as nccl
 import torch.distributed as dist
+import torch.nn.functional as F
 
 from fms_fsdp.policies.ac_handler import apply_fsdp_checkpointing
 from fms_fsdp.fsdp2.mixed_precision import (
-    fpSixteen, 
+    fpSixteen,
     bfSixteen,
 )
+
+
+def compute_retention_loss(exp_out_collect):
+    """
+    For each layer and head, compute pairwise cosine similarity across CP ranks,
+    average over pairs with the same relative distance, then average across all
+    distances, heads, and layers.
+
+    Returns negative average cosine similarity (higher similarity = lower loss).
+    """
+    total_sim = 0.0
+    n_layers = 0
+    last_device = None
+    for layer_idx in exp_out_collect:
+        if "retention_states" not in exp_out_collect[layer_idx]:
+            continue
+        # (batch, num_ranks, nheads, headdim, d_state)
+        states = exp_out_collect[layer_idx]["retention_states"]
+        last_device = states.device
+        B, R, H, hd, ds = states.shape
+        if R < 2:
+            continue
+
+        # Flatten state dims → (B, R, H, hd*ds), normalize for cosine sim
+        states_flat = states.reshape(B, R, H, hd * ds)
+        states_norm = F.normalize(states_flat, dim=-1)
+
+        # Pairwise cosine similarity: (B, H, R, R)
+        sn = states_norm.permute(0, 2, 1, 3)  # (B, H, R, D)
+        cos_sim = torch.matmul(sn, sn.transpose(-1, -2))  # (B, H, R, R)
+
+        # Average over pairs with same relative distance d = 1..R-1
+        dist_sum = 0.0
+        n_dists = 0
+        for d in range(1, R):
+            diag = torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1)  # (B, H, R-d)
+            dist_sum = dist_sum + diag.mean()
+            n_dists += 1
+
+        if n_dists > 0:
+            total_sim = total_sim + dist_sum / n_dists
+            n_layers += 1
+
+    if n_layers == 0:
+        return torch.tensor(0.0, device=last_device)
+
+    return -(total_sim / n_layers)
+
 
 def train(
     cfg,
@@ -76,8 +125,13 @@ def train(
                 run["hparams"] = asdict(cfg)
 
     is_exp_out = (len(model.backbone.experiments) != 0)
+    if cfg.retention_coeff > 0 and not is_exp_out:
+        if rank == 0:
+            print("WARNING: retention_coeff > 0 but no experiment outputs. Is CP enabled?")
+
     model.train()
     ddp_stats = torch.zeros(3).to(local_rank)
+    ret_loss = None
 
     start = time.time()
     loop_start = time.time()
@@ -98,6 +152,12 @@ def train(
         ce_loss = torch.nn.CrossEntropyLoss()
         loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
         loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
+
+        # Retention loss: encourage state retention across CP ranks
+        if cfg.retention_coeff > 0 and is_exp_out:
+            ret_loss = compute_retention_loss(exp_out_collect)
+            loss = loss + cfg.retention_coeff * ret_loss
+
         loss.backward()
 
         ddp_stats[1] += torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip_thresh).full_tensor().item()
@@ -161,6 +221,8 @@ def train(
                     int(new_tokens_seen / elapsed_time * 3600 * 24),
                 )
                 print(f"Total tok/step: {world_size * cfg.batch_size * cfg.seq_length}")
+                if ret_loss is not None:
+                    print("retention loss:", ret_loss.item())
                 if cfg.tracker:
                     vals_to_track = {
                         "learning rate": current_lr,
@@ -172,6 +234,8 @@ def train(
                         "gpu reserved memory": reserved_mem,
                         "gpu allocated memory": allocated_mem,
                     }
+                    if ret_loss is not None:
+                        vals_to_track["retention loss"] = ret_loss.item()
                     if cfg.tracker == "wandb":
                         tracker_fn = wandb.log
                     elif cfg.tracker == "aim":
