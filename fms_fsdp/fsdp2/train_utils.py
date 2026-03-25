@@ -130,7 +130,7 @@ def train(
             print("WARNING: retention_coeff > 0 but no experiment outputs. Is CP enabled?")
 
     model.train()
-    ddp_stats = torch.zeros(4).to(local_rank)
+    ddp_stats = torch.zeros(3).to(local_rank)
     ret_loss = None
 
     start = time.time()
@@ -152,7 +152,6 @@ def train(
         ce_loss = torch.nn.CrossEntropyLoss()
         loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
         loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
-        ce_loss_val = loss.item()
 
         # Retention loss: encourage state retention across CP ranks
         if cfg.retention_coeff > 0 and is_exp_out:
@@ -165,9 +164,12 @@ def train(
         optimizer.step()
         scheduler.step()
 
-        ddp_stats[0] += loss.item()
+        # Track CE loss only (exclude retention term)
+        if ret_loss is not None:
+            ddp_stats[0] += loss.item() - cfg.retention_coeff * ret_loss.item()
+        else:
+            ddp_stats[0] += loss.item()
         ddp_stats[2] += 1
-        ddp_stats[3] += ce_loss_val
 
         if profiler:
             profiler.step()
@@ -185,7 +187,6 @@ def train(
             dist.all_reduce(ddp_stats, op=dist.ReduceOp.SUM)
             train_loss = ddp_stats[0] / ddp_stats[2]
             g_norm = ddp_stats[1] / ddp_stats[2]
-            train_ce_loss = ddp_stats[3] / ddp_stats[2]
             elapsed_time = time.time() - loop_start
 
             if rank == 0:
@@ -208,10 +209,8 @@ def train(
                     device=torch.cuda.current_device()
                 )
 
-                current_ce_loss = train_ce_loss.item()
                 print("step:", batch_idx)
                 print("loss:", current_loss)
-                print("ce loss:", current_ce_loss)
                 print("LR:", current_lr)
                 print("tokens seen:", total_tokens_seen)
                 print("gradient norm:", current_gnorm)
@@ -227,12 +226,11 @@ def train(
                 )
                 print(f"Total tok/step: {world_size * cfg.batch_size * cfg.seq_length}")
                 if ret_loss is not None:
-                    print("retention loss:", ret_loss.item())
+                    print("retention similarity:", -ret_loss.item())
                 if cfg.tracker:
                     vals_to_track = {
                         "learning rate": current_lr,
                         "loss": current_loss,
-                        "ce loss": current_ce_loss,
                         "gradient norm": current_gnorm,
                         "token seen": total_tokens_seen,
                         "current throughput (token per gpu per sec)": current_throughput,
@@ -241,7 +239,7 @@ def train(
                         "gpu allocated memory": allocated_mem,
                     }
                     if ret_loss is not None:
-                        vals_to_track["retention loss"] = ret_loss.item()
+                        vals_to_track["retention similarity"] = -ret_loss.item()
                     if cfg.tracker == "wandb":
                         tracker_fn = wandb.log
                     elif cfg.tracker == "aim":
