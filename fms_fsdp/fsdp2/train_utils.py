@@ -21,51 +21,86 @@ from fms_fsdp.fsdp2.mixed_precision import (
 )
 
 
-def compute_retention_loss(exp_out_collect):
+def _pairwise_cos_sim(states):
     """
-    For each layer and head, compute pairwise cosine similarity across CP ranks,
-    average over pairs with the same relative distance, then average across all
-    distances, heads, and layers.
+    Compute pairwise cosine similarity across the rank dimension.
 
-    Returns negative average cosine similarity (higher similarity = lower loss).
+    Args:
+        states: (B, R, H, hd, ds) — per-rank SSM final states
+
+    Returns:
+        cos_sim: (B, H, R, R) — pairwise cosine similarities
+        pair_vals: (B, H, P) — upper-triangle pair values (P = R*(R-1)/2)
     """
-    total_sim = 0.0
+    B, R, H, hd, ds = states.shape
+    states_flat = states.reshape(B, R, H, hd * ds)
+    states_norm = F.normalize(states_flat, dim=-1)
+    sn = states_norm.permute(0, 2, 1, 3)  # (B, H, R, D)
+    cos_sim = torch.matmul(sn, sn.transpose(-1, -2))  # (B, H, R, R)
+    # Extract upper-triangle pairs (all unique (i,j) with i<j)
+    idx = torch.triu_indices(R, R, offset=1, device=states.device)
+    pair_vals = cos_sim[:, :, idx[0], idx[1]]  # (B, H, P)
+    return cos_sim, pair_vals
+
+
+def compute_retention_loss(exp_out_collect, mode="mean"):
+    """
+    Compute retention loss from per-rank SSM final states.
+
+    Modes:
+        "mean":      -mean(cos_sim) over chunk pairs, heads, layers.
+                     Maximizes average pairwise cosine similarity.
+        "mean_cos2": mean((1 - cos_sim)^2) over chunk pairs, heads, layers.
+                     Pushes low-alignment pairs toward 1, gentle on already-aligned pairs.
+        "var":       mean(var(cos_sim)) where variance is over chunk pairs, per head per layer.
+                     Pushes all pairwise similarities toward their per-head mean (enforces
+                     uniform behavior without squashing toward 1).
+
+    Args:
+        exp_out_collect: dict[layer_idx -> {"retention_states": (B, R, H, hd, ds)}]
+        mode: one of "mean", "mean_cos2", "var"
+
+    Returns:
+        scalar loss to be ADDED to total loss (with positive coefficient).
+    """
+    total_loss = 0.0
     n_layers = 0
     last_device = None
     for layer_idx in exp_out_collect:
         if "retention_states" not in exp_out_collect[layer_idx]:
             continue
-        # (batch, num_ranks, nheads, headdim, d_state)
         states = exp_out_collect[layer_idx]["retention_states"]
         last_device = states.device
         B, R, H, hd, ds = states.shape
         if R < 2:
             continue
 
-        # Flatten state dims → (B, R, H, hd*ds), normalize for cosine sim
-        states_flat = states.reshape(B, R, H, hd * ds)
-        states_norm = F.normalize(states_flat, dim=-1)
+        cos_sim, pair_vals = _pairwise_cos_sim(states)
 
-        # Pairwise cosine similarity: (B, H, R, R)
-        sn = states_norm.permute(0, 2, 1, 3)  # (B, H, R, D)
-        cos_sim = torch.matmul(sn, sn.transpose(-1, -2))  # (B, H, R, R)
+        if mode == "mean":
+            # -mean(cos) → minimize to maximize similarity
+            total_loss = total_loss - pair_vals.mean()
+        elif mode == "mean_cos2":
+            # mean((1 - cos)^2) → minimize to push similarities toward 1
+            total_loss = total_loss + ((1 - pair_vals) ** 2).mean()
+        elif mode == "var":
+            # Per (B, H): average cos_sim at each relative distance, then variance over distances
+            # cos_sim: (B, H, R, R) — diagonal at offset d gives pairs at distance d
+            dist_means = torch.stack(
+                [torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1).mean(dim=-1)
+                 for d in range(1, R)],
+                dim=-1,
+            )  # (B, H, R-1)
+            total_loss = total_loss + dist_means.var(dim=-1).mean()
+        else:
+            raise ValueError(f"Unknown retention_loss_mode: {mode}")
 
-        # Average over pairs with same relative distance d = 1..R-1
-        dist_sum = 0.0
-        n_dists = 0
-        for d in range(1, R):
-            diag = torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1)  # (B, H, R-d)
-            dist_sum = dist_sum + diag.mean()
-            n_dists += 1
-
-        if n_dists > 0:
-            total_sim = total_sim + dist_sum / n_dists
-            n_layers += 1
+        n_layers += 1
 
     if n_layers == 0:
         return torch.tensor(0.0, device=last_device)
 
-    return -(total_sim / n_layers)
+    return total_loss / n_layers
 
 
 def train(
@@ -155,7 +190,7 @@ def train(
 
         # Retention loss: encourage state retention across CP ranks
         if cfg.retention_coeff > 0 and is_exp_out:
-            ret_loss = compute_retention_loss(exp_out_collect)
+            ret_loss = compute_retention_loss(exp_out_collect, mode=cfg.retention_loss_mode)
             loss = loss + cfg.retention_coeff * ret_loss
 
         loss.backward()
@@ -226,7 +261,7 @@ def train(
                 )
                 print(f"Total tok/step: {world_size * cfg.batch_size * cfg.seq_length}")
                 if ret_loss is not None:
-                    print("retention similarity:", -ret_loss.item())
+                    print(f"retention loss ({cfg.retention_loss_mode}):", ret_loss.item())
                 if cfg.tracker:
                     vals_to_track = {
                         "learning rate": current_lr,
@@ -239,7 +274,7 @@ def train(
                         "gpu allocated memory": allocated_mem,
                     }
                     if ret_loss is not None:
-                        vals_to_track["retention similarity"] = -ret_loss.item()
+                        vals_to_track["retention loss"] = ret_loss.item()
                     if cfg.tracker == "wandb":
                         tracker_fn = wandb.log
                     elif cfg.tracker == "aim":

@@ -103,6 +103,7 @@ class train_config:
 
     # retention loss
     retention_coeff: float = -1  # coefficient; -1 means disabled
+    retention_loss_mode: str = "mean"  # "mean", "mean_cos2", or "var"
 
     # freeze some of the layers
     freeze_layer: str = ""
