@@ -1,6 +1,9 @@
 import os
+import warnings
 from dataclasses import asdict
 from functools import partial
+
+warnings.filterwarnings("ignore", message="backward hook.*will not be serialized")
 
 try:
     import packaging.version
@@ -75,22 +78,32 @@ def compute_retention_loss(exp_out_collect, mode="mean"):
         if R < 2:
             continue
 
-        cos_sim, pair_vals = _pairwise_cos_sim(states)
+        cos_sim, _ = _pairwise_cos_sim(states)
+
+        # All modes average within each relative distance first, then across distances.
+        # This ensures each distance d contributes equally (d=1 has R-1 pairs, d=R-1 has 1).
+        # dist_means: (B, H, R-1) — mean cos_sim at each relative distance
+        dist_means = torch.stack(
+            [torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1).mean(dim=-1)
+             for d in range(1, R)],
+            dim=-1,
+        )  # (B, H, R-1)
 
         if mode == "mean":
             # -mean(cos) → minimize to maximize similarity
-            total_loss = total_loss - pair_vals.mean()
+            total_loss = total_loss - dist_means.mean()
         elif mode == "mean_cos2":
-            # mean((1 - cos)^2) → minimize to push similarities toward 1
-            total_loss = total_loss + ((1 - pair_vals) ** 2).mean()
-        elif mode == "var":
-            # Per (B, H): average cos_sim at each relative distance, then variance over distances
-            # cos_sim: (B, H, R, R) — diagonal at offset d gives pairs at distance d
-            dist_means = torch.stack(
-                [torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1).mean(dim=-1)
+            # mean((1 - cos)^2) per distance, then average across distances
+            # Pushes low-alignment pairs toward 1, gentle on already-aligned pairs
+            dist_mean_cos2 = torch.stack(
+                [torch.diagonal(cos_sim, offset=d, dim1=-2, dim2=-1)
+                 .sub(1).pow(2).mean(dim=-1)
                  for d in range(1, R)],
                 dim=-1,
             )  # (B, H, R-1)
+            total_loss = total_loss + dist_mean_cos2.mean()
+        elif mode == "var":
+            # Variance of distance-averaged cos_sim across distances, per (B, H)
             total_loss = total_loss + dist_means.var(dim=-1).mean()
         else:
             raise ValueError(f"Unknown retention_loss_mode: {mode}")
