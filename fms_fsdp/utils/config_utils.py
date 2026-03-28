@@ -1323,6 +1323,76 @@ def get_model_config(model_variant):
             kv_eviction_heavy_ratio=0.1,
             kv_eviction_recent_ratio=0.1,
         )
+    elif model_variant == "llama_1b_yarn_25":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            prune=True,
+            prune_thresh=0.25,
+        )
+    elif model_variant == "llama_1b_yarn_20":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            prune=True,
+            prune_thresh=0.20,
+        )
+    elif model_variant == "llama_1b_yarn_15":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            prune=True,
+            prune_thresh=0.15,
+        )
+    elif model_variant == "llama_1b_yarn_10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            prune=True,
+            prune_thresh=0.10,
+        )
+    elif model_variant == "llama_1b_yarn_05":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            prune=True,
+            prune_thresh=0.05,
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
