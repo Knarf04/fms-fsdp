@@ -1393,6 +1393,70 @@ def get_model_config(model_variant):
             prune=True,
             prune_thresh=0.05,
         )
+    elif model_variant == "llama_1b_snapKV_yarn_10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="snapkv",
+            kv_eviction_sparsity_ratio=0.1,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_h2o_yarn_10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="h2o",
+            kv_eviction_heavy_ratio=0.05,
+            kv_eviction_recent_ratio=0.05,
+        )
+    elif model_variant == "llama_1b_pyramid_snapKV_yarn_10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_snapkv",
+            kv_eviction_sparsity_ratio=0.1,
+            kv_eviction_window_size=32,
+            kv_eviction_kernel_size=7,
+            kv_eviction_pooling="maxpool",
+        )
+    elif model_variant == "llama_1b_pyramid_h2o_yarn_10":
+        model_config = LLaMAConfig(
+            src_vocab_size=128256,
+            emb_dim=1280,
+            nheads=16,
+            kvheads=4,
+            nlayers=32,
+            hidden_grow_factor=3.2,
+            max_expected_seq_len=4096,
+            rope_theta=500000.0,
+            rope_scaling={"rope_type": "yarn"},
+            kv_eviction="pyramid_h2o",
+            kv_eviction_heavy_ratio=0.05,
+            kv_eviction_recent_ratio=0.05,
+        )
     else:
         raise ValueError(f"model variant {model_variant} not supported.")
 
