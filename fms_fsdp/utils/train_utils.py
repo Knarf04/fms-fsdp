@@ -16,7 +16,6 @@ import torch.distributed as dist
 from torch.distributed.fsdp import ShardingStrategy
 
 from fms_fsdp.policies import *
-from fms_fsdp.experiments.param_freeze_utils import *
 
 
 def train(
@@ -78,20 +77,6 @@ def train(
     model.train()
     ddp_stats = torch.zeros(3).to(local_rank)
 
-    frozen_param_names = set()
-    if cfg.freeze_layer:
-        frozen_param_names = build_gradient_mask(
-            model,
-            cfg.freeze_layer,
-            freeze_embedding=True,
-            freeze_norm_f=True,
-            freeze_lm_head=True,
-        )
-    if rank == 0:
-        print(f"--> Using gradient masking for {len(frozen_param_names)} parameters")
-        # for name in frozen_param_names:
-        #     print(name)
-
     start = time.time()
     loop_start = time.time()
     train_loss = -1
@@ -112,10 +97,6 @@ def train(
         loss = ce_loss(output.view(-1, output.size(-1)), label.view(-1).long())
         loss = loss + cfg.zl_coeff * torch.logsumexp(output, dim=-1).pow(2).mean()
         loss.backward()
-
-        # Apply gradient mask to zero out gradients for "frozen" params
-        if frozen_param_names:
-            apply_gradient_mask(model, frozen_param_names)
 
         # =====================================================================
         # DEBUG GRADIENT NORMS

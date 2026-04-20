@@ -142,6 +142,17 @@ def main(**kwargs):
         total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f"\n--> model has {total_params / 1e6} Million params\n")
 
+    # Component-level freezing BEFORE fully_shard() so requires_grad is set
+    # on plain nn.Parameters, not DTensors.
+    if cfg.component:
+        counts = apply_component_freeze(model, mamba_config, cfg.component, cfg.train_freeze)
+        if rank == 0:
+            polarity = "train-only" if cfg.train_freeze else "freeze-only"
+            print(f"--> component={cfg.component!r}, train_freeze={cfg.train_freeze} ({polarity})")
+            print(f"    trainable: {counts['trainable'] / 1e6:.2f}M params")
+            print(f"    frozen:    {counts['frozen'] / 1e6:.2f}M params")
+            print(f"    by type:   {counts['by_type']}")
+
     # get data loader
     if rank == 0:
         print("Constructing datasets...")
@@ -204,46 +215,24 @@ def main(**kwargs):
         torch._dynamo.config.accumulated_cache_size_limit = 128
         model = torch.compile(model)
 
-    # Optimizer: split params by frozen/trainable and weight decay
-    frozen_param_names = build_gradient_mask(model, cfg.freeze_layer) if cfg.freeze_layer else set()
-
-    trainable_with_decay = []
-    trainable_without_decay = []
-    frozen_with_decay = []
-    frozen_without_decay = []
-
-    for name, param in model.named_parameters():
-        is_frozen = name in frozen_param_names
-        is_no_decay = 'A_log' in name or 'D' in name or 'dt_bias' in name
-
-        if is_frozen:
-            if is_no_decay:
-                frozen_without_decay.append(param)
-            else:
-                frozen_with_decay.append(param)
-        else:
-            if is_no_decay:
-                trainable_without_decay.append(param)
-            else:
-                trainable_with_decay.append(param)
-
-    total_params = len(list(model.named_parameters()))
-    assert (len(trainable_with_decay) + len(trainable_without_decay) +
-            len(frozen_with_decay) + len(frozen_without_decay)) == total_params
-
-    if rank == 0 and frozen_param_names:
-        n_frozen = len(frozen_with_decay) + len(frozen_without_decay)
-        print(f"--> freeze_layer: {cfg.freeze_layer}")
-        print(f"--> frozen params: {n_frozen}, trainable params: {total_params - n_frozen}")
+    # Optimizer: 2 groups, filtered by requires_grad. Frozen params (requires_grad=False)
+    # are skipped entirely — AdamW's step() short-circuits on `grad is None`, so no state
+    # is allocated and no weight decay is applied.
+    decay, no_decay = [], []
+    for n, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        no_wd = ('A_log' in n) or ('.D' in n) or ('dt_bias' in n)
+        (no_decay if no_wd else decay).append(p)
 
     param_groups = [
-        {"params": trainable_with_decay, "weight_decay": 0.1, "lr": cfg.learning_rate},
-        {"params": trainable_without_decay, "weight_decay": 0., "lr": cfg.learning_rate},
+        {"params": decay,    "weight_decay": 0.1, "lr": cfg.learning_rate},
+        {"params": no_decay, "weight_decay": 0.0, "lr": cfg.learning_rate},
     ]
-    if frozen_with_decay:
-        param_groups.append({"params": frozen_with_decay, "weight_decay": 0.1, "lr": 0.0, "frozen": True})
-    if frozen_without_decay:
-        param_groups.append({"params": frozen_without_decay, "weight_decay": 0., "lr": 0.0, "frozen": True})
+
+    if rank == 0:
+        n_train = sum(p.numel() for g in param_groups for p in g["params"])
+        print(f"--> optimizer: {n_train / 1e6:.2f}M trainable params in 2 groups")
 
     optimizer = optim.AdamW(
         param_groups,
@@ -270,15 +259,8 @@ def main(**kwargs):
 
     if not is_resuming:
         start_step = 0
-        # Override loaded optim hyperparams with the current values
         for g in optimizer.param_groups:
-            g["initial_lr"] = 0.0 if g.get("frozen", False) else cfg.learning_rate
-    else:
-        # Ensure frozen groups stay frozen even when resuming from a checkpoint
-        for g in optimizer.param_groups:
-            if g.get("frozen", False):
-                g["initial_lr"] = 0.0
-                g["lr"] = 0.0
+            g["initial_lr"] = cfg.learning_rate
 
     # LR schedule
     warmup_interval = min(2000, cfg.num_steps // 20)
