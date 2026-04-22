@@ -48,13 +48,14 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
         )
     attn_layer_idx = set(mamba_config.attn_layer_idx or [])
     n_layer = mamba_config.n_layer
-    # Mamba layers immediately following an attn layer (skip OOB and back-to-back attn).
     post_attn_mamba = {
         i + 1 for i in attn_layer_idx
         if (i + 1) < n_layer and (i + 1) not in attn_layer_idx
     }
 
+    target_param_names: Set[str] = set()
     counts = {
+        "target_param_names": target_param_names,
         "trainable": 0,
         "frozen": 0,
         "by_type": {"attn": 0, "mamba": 0, "mlp": 0, "other": 0},
@@ -66,10 +67,11 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
             matches = (kind == "mamba") and (layer_idx in post_attn_mamba)
         else:
             matches = (kind == component)
-        keep_trainable = matches if train_freeze else (not matches)
-        if keep_trainable:
+        is_target = matches if train_freeze else (not matches)
+        if is_target:
+            target_param_names.add(name)
             counts["trainable"] += p.numel()
         else:
-            p.requires_grad_(False)
             counts["frozen"] += p.numel()
+            p.requires_grad_(False)
     return counts

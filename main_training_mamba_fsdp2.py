@@ -142,16 +142,34 @@ def main(**kwargs):
         total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f"\n--> model has {total_params / 1e6} Million params\n")
 
-    # Component-level freezing BEFORE fully_shard() so requires_grad is set
-    # on plain nn.Parameters, not DTensors.
+    # Component-level freezing BEFORE fully_shard() so requires_grad flips
+    # happen on plain nn.Parameters, not DTensors. Non-target params get
+    # requires_grad=False and are skipped by AdamW (no state allocated).
+    target_param_names = set()
     if cfg.component:
         counts = apply_component_freeze(model, mamba_config, cfg.component, cfg.train_freeze)
+        target_param_names = counts["target_param_names"]
         if rank == 0:
             polarity = "train-only" if cfg.train_freeze else "freeze-only"
             print(f"--> component={cfg.component!r}, train_freeze={cfg.train_freeze} ({polarity})")
             print(f"    trainable: {counts['trainable'] / 1e6:.2f}M params")
             print(f"    frozen:    {counts['frozen'] / 1e6:.2f}M params")
             print(f"    by type:   {counts['by_type']}")
+
+        # For mamba_post_attn under CP: tag the attn MHACP mixers so ring-attn
+        # runs under no_grad. This suppresses ring_flash_attn's backward
+        # (including the KV allgather on the CP mesh) that otherwise hangs
+        # when the attn block's output grad path is orphaned. Safe because in
+        # fast path those blocks' params are frozen anyway.
+        if cfg.component == "mamba_post_attn" and cfg.train_freeze and cfg.cp:
+            tagged = 0
+            for i, layer in enumerate(model.backbone.layers):
+                if i in (mamba_config.attn_layer_idx or []):
+                    if hasattr(layer.mixer, "_skip_backward"):
+                        layer.mixer._skip_backward = True
+                        tagged += 1
+            if rank == 0:
+                print(f"    skip_backward tagged on {tagged} attn mixers (CP ring backward disabled)")
 
     # get data loader
     if rank == 0:
@@ -215,9 +233,9 @@ def main(**kwargs):
         torch._dynamo.config.accumulated_cache_size_limit = 128
         model = torch.compile(model)
 
-    # Optimizer: 2 groups, filtered by requires_grad. Frozen params (requires_grad=False)
-    # are skipped entirely — AdamW's step() short-circuits on `grad is None`, so no state
-    # is allocated and no weight decay is applied.
+    # Optimizer: 2 groups, filtered by requires_grad. Frozen params
+    # (requires_grad=False) are skipped entirely — AdamW's step() short-circuits
+    # on `grad is None`, so no state is allocated and no weight decay is applied.
     decay, no_decay = [], []
     for n, p in model.named_parameters():
         if not p.requires_grad:
