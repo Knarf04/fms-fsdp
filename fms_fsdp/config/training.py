@@ -107,8 +107,10 @@ class train_config:
 
     # component-level freezer. `component` selects the target block type;
     # `train_freeze` chooses polarity.
-    #   component="":     disabled (full training)
-    #   component="attn"  | "mamba" | "mlp"
+    #   component="":                disabled (full training)
+    #   component="attn" | "mamba" | "mlp"
+    #   component="mamba_post_attn": only mamba layers immediately following
+    #                                an attn layer (index = attn_idx + 1).
     #   train_freeze=True  -> ONLY `component` is trainable (emb/norm_f/lm_head frozen)
     #   train_freeze=False -> ONLY `component` is frozen    (emb/norm_f/lm_head trainable)
     component: str = ""
