@@ -69,6 +69,14 @@ def main(**kwargs):
         Path.home(), ".triton", "cache", str(local_rank)
     )
 
+    # Optional collective tracer. Enable with env var FMS_TRACE_COLLECTIVES=1.
+    # Writes per-rank logs to $FMS_TRACE_DIR (default /tmp). See the tail of
+    # /tmp/collective_trace_rank_<rank>.log after a hang to identify the
+    # exact collective that NCCL's watchdog timed out on.
+    if os.environ.get("FMS_TRACE_COLLECTIVES", "") in ("1", "true", "True"):
+        from fms_fsdp.utils.collective_tracer import install as install_tracer
+        install_tracer(rank, log_dir=os.environ.get("FMS_TRACE_DIR", "/tmp"))
+
     # get policy.
     block = Block
     (        
@@ -155,21 +163,6 @@ def main(**kwargs):
             print(f"    trainable: {counts['trainable'] / 1e6:.2f}M params")
             print(f"    frozen:    {counts['frozen'] / 1e6:.2f}M params")
             print(f"    by type:   {counts['by_type']}")
-
-        # For mamba_post_attn under CP: tag the attn MHACP mixers so ring-attn
-        # runs under no_grad. This suppresses ring_flash_attn's backward
-        # (including the KV allgather on the CP mesh) that otherwise hangs
-        # when the attn block's output grad path is orphaned. Safe because in
-        # fast path those blocks' params are frozen anyway.
-        if cfg.component == "mamba_post_attn" and cfg.train_freeze and cfg.cp:
-            tagged = 0
-            for i, layer in enumerate(model.backbone.layers):
-                if i in (mamba_config.attn_layer_idx or []):
-                    if hasattr(layer.mixer, "_skip_backward"):
-                        layer.mixer._skip_backward = True
-                        tagged += 1
-            if rank == 0:
-                print(f"    skip_backward tagged on {tagged} attn mixers (CP ring backward disabled)")
 
     # get data loader
     if rank == 0:
