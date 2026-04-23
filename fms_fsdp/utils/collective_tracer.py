@@ -8,17 +8,21 @@ timeout message) and what Python call site enqueued it.
 
 Usage:
     from fms_fsdp.utils.collective_tracer import install
-    install(rank, log_dir="/tmp")   # call ONCE, as early as possible
+    install(rank, log_dir="/gpfs/hshen/nccl_debug/<run_id>")
 
 Output:
-    - Per-rank file: /tmp/collective_trace_rank_<rank>.log
+    - Per-rank file: <log_dir>/rank_<NNN>.log
     - Rank 0 also writes to stderr (set rank0_stderr=False to disable).
 
 Notes:
+    - Wrappers use (*args, **kwargs) pass-through so they work regardless of
+      whether callers use positional or keyword arguments, and regardless of
+      parameter renames across PyTorch versions (e.g. `output_tensor` vs
+      `output` for `all_gather_into_tensor`).
     - The per-PG sequence counter on the Python side matches NCCL's internal
       SeqNum for the same PG, so the last line in the log before a hang names
       the exact collective whose SeqNum NCCL will report as timed out.
-    - Stack traces are trimmed to the user-relevant frames (torch internals
+    - Stack traces are trimmed to user-relevant frames (torch internals
       stripped) and capped at 6 entries to keep log volume sane.
     - Every line is `flush=True` so partial output survives process kill.
 """
@@ -56,7 +60,6 @@ def _pg_name(group) -> str:
     if group is None:
         return "default"
     try:
-        # ProcessGroup in recent torch has a .group_name attribute.
         return group.group_name
     except AttributeError:
         return f"pg@{id(group):x}"
@@ -66,7 +69,6 @@ def _short_stack(limit: int = 6) -> str:
     frames = traceback.extract_stack()
     # Drop the 2 innermost frames (this helper + the wrapper that called it).
     frames = frames[:-2]
-    # Strip torch / FSDP internal frames.
     kept = [f for f in frames if not any(h in f.filename for h in _HIDE_FRAMES_FROM)]
     kept = kept[-limit:]
     return "; ".join(f"{os.path.basename(f.filename)}:{f.lineno}({f.name})" for f in kept)
@@ -88,6 +90,16 @@ def _log(op: str, group, in_numel: int, out_numel: int, extra: str = "") -> None
         print(line, file=sys.stderr, flush=True)
 
 
+def _pick(args, kwargs, pos, *names):
+    """Pick an argument by position or any of the given kwarg names."""
+    if len(args) > pos:
+        return args[pos]
+    for name in names:
+        if name in kwargs:
+            return kwargs[name]
+    return None
+
+
 # --- originals (filled in at install time) ---
 _orig: dict[str, object] = {}
 
@@ -103,72 +115,106 @@ def install(rank: int, log_dir: str = "/tmp", rank0_stderr: bool = True) -> None
 
     os.makedirs(log_dir, exist_ok=True)
     path = os.path.join(log_dir, f"rank_{rank:03d}.log")
-    _log_file = open(path, "w", buffering=1)  # line-buffered
+    _log_file = open(path, "w", buffering=1)
     print(f"[collective_tracer] rank={rank} logging to {path}", file=sys.stderr, flush=True)
 
     # --- all_gather_into_tensor ---
     if hasattr(dist, "all_gather_into_tensor"):
         _orig["all_gather_into_tensor"] = dist.all_gather_into_tensor
-        def _agit(output, input, group=None, async_op=False):
-            _log("all_gather_into_tensor", group, input.numel(), output.numel(),
-                 f"dtype={input.dtype} async={async_op}")
-            return _orig["all_gather_into_tensor"](output, input, group=group, async_op=async_op)
+        def _agit(*args, **kwargs):
+            output = _pick(args, kwargs, 0, "output_tensor", "output")
+            input_ = _pick(args, kwargs, 1, "input_tensor", "input")
+            group = _pick(args, kwargs, 2, "group")
+            async_op = _pick(args, kwargs, 3, "async_op") or False
+            in_n = input_.numel() if input_ is not None else -1
+            out_n = output.numel() if output is not None else -1
+            dt = input_.dtype if input_ is not None else "?"
+            _log("all_gather_into_tensor", group, in_n, out_n, f"dtype={dt} async={async_op}")
+            return _orig["all_gather_into_tensor"](*args, **kwargs)
         dist.all_gather_into_tensor = _agit
 
     # --- reduce_scatter_tensor ---
     if hasattr(dist, "reduce_scatter_tensor"):
         _orig["reduce_scatter_tensor"] = dist.reduce_scatter_tensor
-        def _rst(output, input, op=dist.ReduceOp.SUM, group=None, async_op=False):
-            _log("reduce_scatter_tensor", group, input.numel(), output.numel(),
-                 f"dtype={input.dtype} op={op} async={async_op}")
-            return _orig["reduce_scatter_tensor"](output, input, op=op, group=group, async_op=async_op)
+        def _rst(*args, **kwargs):
+            output = _pick(args, kwargs, 0, "output_tensor", "output")
+            input_ = _pick(args, kwargs, 1, "input_tensor", "input")
+            op = _pick(args, kwargs, 2, "op") or dist.ReduceOp.SUM
+            group = _pick(args, kwargs, 3, "group")
+            async_op = _pick(args, kwargs, 4, "async_op") or False
+            in_n = input_.numel() if input_ is not None else -1
+            out_n = output.numel() if output is not None else -1
+            dt = input_.dtype if input_ is not None else "?"
+            _log("reduce_scatter_tensor", group, in_n, out_n, f"dtype={dt} op={op} async={async_op}")
+            return _orig["reduce_scatter_tensor"](*args, **kwargs)
         dist.reduce_scatter_tensor = _rst
 
     # --- all_reduce ---
     _orig["all_reduce"] = dist.all_reduce
-    def _ar(tensor, op=dist.ReduceOp.SUM, group=None, async_op=False):
-        _log("all_reduce", group, tensor.numel(), tensor.numel(),
-             f"dtype={tensor.dtype} op={op} async={async_op}")
-        return _orig["all_reduce"](tensor, op=op, group=group, async_op=async_op)
+    def _ar(*args, **kwargs):
+        tensor = _pick(args, kwargs, 0, "tensor")
+        op = _pick(args, kwargs, 1, "op") or dist.ReduceOp.SUM
+        group = _pick(args, kwargs, 2, "group")
+        async_op = _pick(args, kwargs, 3, "async_op") or False
+        n = tensor.numel() if tensor is not None else -1
+        dt = tensor.dtype if tensor is not None else "?"
+        _log("all_reduce", group, n, n, f"dtype={dt} op={op} async={async_op}")
+        return _orig["all_reduce"](*args, **kwargs)
     dist.all_reduce = _ar
 
-    # --- all_gather (list form, used by older code paths) ---
+    # --- all_gather (list form) ---
     _orig["all_gather"] = dist.all_gather
-    def _ag(tensor_list, tensor, group=None, async_op=False):
-        _log("all_gather", group, tensor.numel(),
-             sum(t.numel() for t in tensor_list),
-             f"dtype={tensor.dtype} async={async_op}")
-        return _orig["all_gather"](tensor_list, tensor, group=group, async_op=async_op)
+    def _ag(*args, **kwargs):
+        tensor_list = _pick(args, kwargs, 0, "tensor_list")
+        tensor = _pick(args, kwargs, 1, "tensor")
+        group = _pick(args, kwargs, 2, "group")
+        async_op = _pick(args, kwargs, 3, "async_op") or False
+        in_n = tensor.numel() if tensor is not None else -1
+        out_n = sum(t.numel() for t in tensor_list) if tensor_list else -1
+        dt = tensor.dtype if tensor is not None else "?"
+        _log("all_gather", group, in_n, out_n, f"dtype={dt} async={async_op}")
+        return _orig["all_gather"](*args, **kwargs)
     dist.all_gather = _ag
 
     # --- broadcast ---
     _orig["broadcast"] = dist.broadcast
-    def _bc(tensor, src, group=None, async_op=False):
-        _log("broadcast", group, tensor.numel(), tensor.numel(),
-             f"src={src} dtype={tensor.dtype} async={async_op}")
-        return _orig["broadcast"](tensor, src, group=group, async_op=async_op)
+    def _bc(*args, **kwargs):
+        tensor = _pick(args, kwargs, 0, "tensor")
+        src = _pick(args, kwargs, 1, "src")
+        group = _pick(args, kwargs, 2, "group")
+        async_op = _pick(args, kwargs, 3, "async_op") or False
+        n = tensor.numel() if tensor is not None else -1
+        dt = tensor.dtype if tensor is not None else "?"
+        _log("broadcast", group, n, n, f"src={src} dtype={dt} async={async_op}")
+        return _orig["broadcast"](*args, **kwargs)
     dist.broadcast = _bc
 
-    # --- batch_isend_irecv (used by RingComm / CP P2P) ---
+    # --- batch_isend_irecv (RingComm / CP P2P) ---
     _orig["batch_isend_irecv"] = dist.batch_isend_irecv
-    def _bii(p2p_op_list):
+    def _bii(*args, **kwargs):
+        p2p_op_list = _pick(args, kwargs, 0, "p2p_op_list") or []
         total = sum(op.tensor.numel() for op in p2p_op_list)
         desc = ",".join(
             f"{op.op.__name__}(->{op.peer},n={op.tensor.numel()})"
             for op in p2p_op_list
         )
-        # P2P ops are per-op, so group is pulled from the first op.
         grp = p2p_op_list[0].group if p2p_op_list else None
         _log("batch_isend_irecv", grp, total, total, f"n_ops={len(p2p_op_list)} {desc}")
-        return _orig["batch_isend_irecv"](p2p_op_list)
+        return _orig["batch_isend_irecv"](*args, **kwargs)
     dist.batch_isend_irecv = _bii
 
-    # --- reduce (pointwise, used by state-passing in some modes) ---
+    # --- reduce (pointwise) ---
     _orig["reduce"] = dist.reduce
-    def _rd(tensor, dst, op=dist.ReduceOp.SUM, group=None, async_op=False):
-        _log("reduce", group, tensor.numel(), tensor.numel(),
-             f"dst={dst} dtype={tensor.dtype} op={op} async={async_op}")
-        return _orig["reduce"](tensor, dst, op=op, group=group, async_op=async_op)
+    def _rd(*args, **kwargs):
+        tensor = _pick(args, kwargs, 0, "tensor")
+        dst = _pick(args, kwargs, 1, "dst")
+        op = _pick(args, kwargs, 2, "op") or dist.ReduceOp.SUM
+        group = _pick(args, kwargs, 3, "group")
+        async_op = _pick(args, kwargs, 4, "async_op") or False
+        n = tensor.numel() if tensor is not None else -1
+        dt = tensor.dtype if tensor is not None else "?"
+        _log("reduce", group, n, n, f"dst={dst} dtype={dt} op={op} async={async_op}")
+        return _orig["reduce"](*args, **kwargs)
     dist.reduce = _rd
 
 
