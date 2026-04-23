@@ -102,7 +102,7 @@ def install(rank: int, log_dir: str = "/tmp", rank0_stderr: bool = True) -> None
     _rank0_stderr = rank0_stderr
 
     os.makedirs(log_dir, exist_ok=True)
-    path = os.path.join(log_dir, f"collective_trace_rank_{rank}.log")
+    path = os.path.join(log_dir, f"rank_{rank:03d}.log")
     _log_file = open(path, "w", buffering=1)  # line-buffered
     print(f"[collective_tracer] rank={rank} logging to {path}", file=sys.stderr, flush=True)
 
