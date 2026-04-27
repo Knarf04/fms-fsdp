@@ -1198,9 +1198,30 @@ class StreamingDocDataset(_StatefulDataset):
                 os.path.relpath(datapath, pref),
                 "shardlist.pth",
             )
-            if len(self.metapath)>0 and os.path.exists(mp):
-                shards,shard_sizes = torch.load(mp)
-            else:
+            shards = None
+            shard_sizes = None
+            if len(self.metapath) > 0 and os.path.exists(mp):
+                # PyTorch 2.6 changed torch.load default to weights_only=True,
+                # which rejects this (list[str], list[int]) tuple. The file is
+                # written by us (rank 0) so it is not an untrusted source.
+                try:
+                    shards, shard_sizes = torch.load(mp, weights_only=False)
+                except (RuntimeError, EOFError, Exception) as e:
+                    # Two failure modes worth tolerating:
+                    #   1. Partial/corrupt file from a prior interrupted run, or
+                    #   2. A racing rank reading mid-write (despite the atomic
+                    #      rename below, very old caches may not have it).
+                    # In either case, regenerate from disk.
+                    if self.verbose or self.rank == 0:
+                        logging.warning(
+                            f"Worker {self.rank}: shardlist cache at {mp} "
+                            f"failed to load ({type(e).__name__}: {e}); "
+                            f"regenerating from disk."
+                        )
+                    shards = None
+                    shard_sizes = None
+
+            if shards is None:
                 shards = [
                     os.path.join(root, name)[len(datapath) + 1 :]
                     for root, dirs, files in os.walk(datapath, topdown=False, followlinks=True)
@@ -1215,7 +1236,12 @@ class StreamingDocDataset(_StatefulDataset):
                 ]
                 if self.rank == 0 and len(self.metapath) > 0:
                     os.makedirs(os.path.split(mp)[0], exist_ok=True)
-                    torch.save((shards, shard_sizes), mp)
+                    # Atomic write so concurrent readers on other ranks never
+                    # observe a partial file: write to a unique temp file,
+                    # then rename (rename is atomic on POSIX).
+                    tmp = mp + f".tmp.{os.getpid()}"
+                    torch.save((shards, shard_sizes), tmp)
+                    os.replace(tmp, mp)
 
             # Use shard file sizes to perform partitioning
             # Create shardlist of form shardid -> [start%, end%]

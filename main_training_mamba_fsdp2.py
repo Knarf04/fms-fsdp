@@ -69,17 +69,6 @@ def main(**kwargs):
         Path.home(), ".triton", "cache", str(local_rank)
     )
 
-    # Collective tracer — unconditional while debugging the mamba_post_attn
-    # hang. Writes per-rank logs to a per-run subdir on GPFS (survives job
-    # cleanup / pod eviction). After a hang:
-    #   tail -n 15 /gpfs/hshen/nccl_debug/<run_id>/rank_<rank>.log
-    # names the exact collective NCCL's watchdog timed out on. The seq number
-    # in the log aligns with NCCL's SeqNum in the timeout message.
-    import time
-    run_id = os.environ.get("TORCHELASTIC_RUN_ID") or time.strftime("%Y%m%d_%H%M")
-    from fms_fsdp.utils.collective_tracer import install as install_tracer
-    install_tracer(rank, log_dir=f"/gpfs/hshen/nccl_debug/{run_id}")
-
     # get policy.
     block = Block
     (        
