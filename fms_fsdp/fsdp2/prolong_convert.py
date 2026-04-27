@@ -18,6 +18,11 @@ This converter:
 - runs one MDS shard per worker process; defaults to os.cpu_count()
   workers with TOKENIZERS_PARALLELISM=false to avoid thread oversubscription
 
+Subset names are discovered from the MDS index.json; the actual ProLong-64K
+subsets (per a real download) include: arxiv, book-65536, dclm-baseline,
+dolmawiki, fineweb-2023-50, ... — NOT the names listed on the dataset card.
+Run with `--dry_run true` first to see what was discovered.
+
 Usage:
     python -m fms_fsdp.fsdp2.prolong_convert \
         --hf_dataset princeton-nlp/prolong-data-512K \
