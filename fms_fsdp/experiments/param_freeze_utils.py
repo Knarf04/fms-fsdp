@@ -1,7 +1,14 @@
 import re
 from typing import Optional, Set, Tuple
 
-_VALID_COMPONENTS = {"attn", "mamba", "mlp", "mamba_post_attn"}
+_VALID_COMPONENTS = {"attn", "mamba", "mlp", "mamba_post_attn", "norm"}
+
+# Matches the per-Block pre-mixer norm (".norm.") and pre-mlp norm (".norm2.")
+# on any layer index, with optional torch.compile prefix. Does NOT match the
+# final backbone.norm_f or the mixer-internal RMSNorm inside Mamba2.
+_NORM_PARAM_RE = re.compile(
+    r'(?:_orig_mod\.)?backbone\.layers\.\d+\.norm2?\.'
+)
 
 
 def _classify_param(
@@ -37,6 +44,9 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
         "mamba_post_attn" -> only the mamba layers sitting immediately after
                              an attention layer (index = attn_idx + 1, when
                              that slot is itself a mamba layer)
+        "norm"            -> only the per-Block norms: pre-mixer (.norm.) and
+                             pre-mlp (.norm2.) across all layers. Mixers and
+                             MLPs are frozen.
 
     train_freeze:
         True  -> matches(component)  trainable, else frozen
@@ -65,6 +75,9 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
         counts["by_type"][kind] += p.numel()
         if component == "mamba_post_attn":
             matches = (kind == "mamba") and (layer_idx in post_attn_mamba)
+        elif component == "norm":
+            # Norm cuts across attn/mamba/mlp kinds — match by name pattern.
+            matches = bool(_NORM_PARAM_RE.search(name))
         else:
             matches = (kind == component)
         is_target = matches if train_freeze else (not matches)
