@@ -1,13 +1,20 @@
 import re
 from typing import Optional, Set, Tuple
 
-_VALID_COMPONENTS = {"attn", "mamba", "mlp", "mamba_post_attn", "norm"}
+_VALID_COMPONENTS = {"attn", "mamba", "mlp", "mamba_post_attn", "norm", "mamba_norm"}
 
 # Matches the per-Block pre-mixer norm (".norm."), pre-mlp norm (".norm2."),
 # and the model-level final norm ("backbone.norm_f."), with optional
 # torch.compile prefix. Does NOT match the mixer-internal RMSNorm inside Mamba2.
 _NORM_PARAM_RE = re.compile(
     r'(?:_orig_mod\.)?backbone\.(?:layers\.\d+\.norm2?|norm_f)\.'
+)
+
+# Matches the mixer-internal RMSNorm inside Mamba2 (MambaRMSNormGated at
+# mixer.norm.*). Layer-index-gated against attn_layer_idx at match time
+# so attention layers' mixer params are never picked up here.
+_MAMBA_NORM_PARAM_RE = re.compile(
+    r'(?:_orig_mod\.)?backbone\.layers\.(\d+)\.mixer\.norm\.'
 )
 
 
@@ -47,6 +54,10 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
         "norm"            -> all norms: per-Block pre-mixer (.norm.), pre-mlp
                              (.norm2.), and the final backbone.norm_f. Mixers
                              and MLPs are frozen.
+        "mamba_norm"      -> ONLY the mixer-internal RMSNorm inside Mamba2
+                             layers (MambaRMSNormGated at mixer.norm.*).
+                             Excludes attn-layer mixers, pre-mixer norms,
+                             pre-mlp norms, and norm_f.
 
     train_freeze:
         True  -> matches(component)  trainable, else frozen
@@ -78,6 +89,12 @@ def apply_component_freeze(model, mamba_config, component: str, train_freeze: bo
         elif component == "norm":
             # Norm cuts across attn/mamba/mlp kinds — match by name pattern.
             matches = bool(_NORM_PARAM_RE.search(name))
+        elif component == "mamba_norm":
+            # Mixer-internal RMSNorm only on mamba layers. Match by name +
+            # layer-index gating so attn-layer mixers (different module shape,
+            # but defensively excluded) never qualify.
+            mn = _MAMBA_NORM_PARAM_RE.search(name)
+            matches = bool(mn) and (int(mn.group(1)) not in attn_layer_idx)
         else:
             matches = (kind == component)
         is_target = matches if train_freeze else (not matches)

@@ -155,6 +155,9 @@ def main(**kwargs):
             print(f"    trainable: {counts['trainable'] / 1e6:.2f}M params")
             print(f"    frozen:    {counts['frozen'] / 1e6:.2f}M params")
             print(f"    by type:   {counts['by_type']}")
+            for name, p in model.named_parameters():
+                if p.requires_grad:
+                    print(name, p.numel())
 
     # get data loader
     if rank == 0:

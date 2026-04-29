@@ -114,6 +114,9 @@ class train_config:
     #   component="norm":            all norms: per-Block .norm. + .norm2. and
     #                                the final backbone.norm_f; mixers + MLPs
     #                                frozen.
+    #   component="mamba_norm":      ONLY the mixer-internal RMSNorm inside
+    #                                Mamba2 (mixer.norm.*); excludes attn
+    #                                mixers, pre-mixer/-mlp norms, and norm_f.
     #   train_freeze=True  -> ONLY `component` is trainable (emb/norm_f/lm_head frozen)
     #   train_freeze=False -> ONLY `component` is frozen    (emb/norm_f/lm_head trainable)
     component: str = ""
