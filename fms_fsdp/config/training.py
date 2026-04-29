@@ -111,8 +111,9 @@ class train_config:
     #   component="attn" | "mamba" | "mlp"
     #   component="mamba_post_attn": only mamba layers immediately following
     #                                an attn layer (index = attn_idx + 1).
-    #   component="norm":            only per-Block norms (.norm. + .norm2.)
-    #                                across all layers; mixers + MLPs frozen.
+    #   component="norm":            all norms: per-Block .norm. + .norm2. and
+    #                                the final backbone.norm_f; mixers + MLPs
+    #                                frozen.
     #   train_freeze=True  -> ONLY `component` is trainable (emb/norm_f/lm_head frozen)
     #   train_freeze=False -> ONLY `component` is frozen    (emb/norm_f/lm_head trainable)
     component: str = ""
