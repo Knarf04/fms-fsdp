@@ -103,9 +103,11 @@ def main(**kwargs):
 
     if cfg.cp:
         if cfg.cp_over_world:
-            # CP spans the whole world. Build a separate 1D world mesh so CP
-            # collectives are independent from FSDP shard collectives on intra_node.
-            cp_mesh = init_device_mesh("cuda", (world_size,)) if requires_2d_mesh else mesh
+            # CP spans the whole world. Flatten the 2D mesh into a 1D world view
+            # so the CP group reuses existing process groups; creating a fresh
+            # world-spanning PG via init_device_mesh deadlocks against FSDP2's
+            # intra_node shard PG (NCCL ordering across overlapping communicators).
+            cp_mesh = mesh._flatten("cp_world") if requires_2d_mesh else mesh
         else:
             # CP intra-node only; mesh must be 2D here.
             cp_mesh = mesh["intra_node"]
