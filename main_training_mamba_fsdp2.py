@@ -15,7 +15,7 @@ from torch import distributed as dist
 # FSDP2
 from torch.distributed import DeviceMesh, init_device_mesh
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
-from torch.distributed._composable.fsdp import fully_shard, register_fsdp_forward_method
+from torch.distributed._composable.fsdp import FSDPModule, fully_shard, register_fsdp_forward_method
 from torch.optim.lr_scheduler import LambdaLR
 
 from fms_fsdp import config
@@ -213,11 +213,21 @@ def main(**kwargs):
                 reshard_after_forward=True
             )
     fully_shard(
-        model, 
-        mesh=fsdp_mesh, 
-        mp_policy=mixed_precision_policy, 
+        model,
+        mesh=fsdp_mesh,
+        mp_policy=mixed_precision_policy,
         reshard_after_forward=True
     )
+
+    # Disable FSDP2 prefetch: collectives become synchronous (FSDP1-like), so
+    # every rank submits FSDP/CP collectives in the same Python-order. Prevents
+    # NCCL deadlocks from overlapping PGs (intra_node/inter_node vs cp_world)
+    # being entered in different orders across ranks.
+    for m in model.modules():
+        if isinstance(m, FSDPModule):
+            m.set_modules_to_forward_prefetch([])
+            m.set_modules_to_backward_prefetch([])
+
     if rank == 0:
         print(model)
 
