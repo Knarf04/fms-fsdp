@@ -743,8 +743,29 @@ def get_model_config(model_variant):
             "attn": {
                 "layers": [4, 12, 20, 28],
                 "num_heads": 10,
-                "num_kv_heads": 5, 
-                "rope_theta": 10000.0,  
+                "num_kv_heads": 5,
+                "rope_theta": 10000.0,
+            },
+        }
+    elif model_variant == "gdn_h_1b_yarn": # 1023.36M
+        model_config = {
+            "hidden_size": 1280,
+            "intermediate_size": 3072,
+            "num_hidden_layers": 32,
+            "num_heads": 4,
+            "head_dim": 256,
+            "vocab_size": 128256,
+            "max_position_embeddings": 4096,
+            "attn": {
+                "layers": [4, 12, 20, 28],
+                "num_heads": 16,
+                "num_kv_heads": 4,
+                "rope_theta": 500000.0,
+                "rope_scaling": {
+                    "rope_type": "yarn",
+                    # original_max_position_embeddings defaults to max_position_embeddings (4096)
+                    # beta_fast / beta_slow default to 35 / 0.7
+                },
             },
         }
     else:
